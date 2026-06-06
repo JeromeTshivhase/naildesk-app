@@ -1,0 +1,159 @@
+@import "tailwindcss" source(none);
+@source "../src";
+
+/* ── Light theme ─────────────────────────────────────────────────────── */
+:root,
+.light {
+  --background:         oklch(0.985 0.012 340);
+  --foreground:         oklch(0.20 0.05 340);
+  --card:               oklch(1.00 0.00 0);
+  --card-foreground:    oklch(0.20 0.05 340);
+  --primary:            oklch(0.62 0.24 350);
+  --primary-foreground: oklch(0.99 0.005 340);
+  --secondary:          oklch(0.96 0.02 340);
+  --secondary-foreground: oklch(0.20 0.05 340);
+  --muted:              oklch(0.96 0.015 340);
+  --muted-foreground:   oklch(0.48 0.04 340);
+  --accent:             oklch(0.78 0.16 25);
+  --accent-foreground:  oklch(0.18 0.05 25);
+  --destructive:        oklch(0.58 0.2 22);
+  --destructive-foreground: oklch(0.99 0.005 340);
+  --border:             oklch(0.92 0.02 340);
+  --input:              oklch(0.97 0.012 55);
+  --ring:               oklch(0.62 0.24 350);
+  --radius:             0.75rem;
+  --status-amber-bg:    oklch(0.96 0.06 75);
+  --status-amber-fg:    oklch(0.45 0.14 60);
+  --status-sage-bg:     oklch(0.94 0.06 155);
+  --status-sage-fg:     oklch(0.40 0.12 155);
+  --status-warm-bg:     oklch(0.96 0.02 340);
+  --status-warm-fg:     oklch(0.45 0.04 340);
+  --status-rose-bg:     oklch(0.94 0.07 12);
+  --status-rose-fg:     oklch(0.48 0.18 22);
+  --status-gray-bg:     oklch(0.95 0.005 340);
+  --status-gray-fg:     oklch(0.50 0.02 340);
+  --shadow-gold:        0 4px 16px oklch(0.72 0.12 55 / 0.35);
+  color-scheme: light;
+}
+
+/* ── Dark theme ──────────────────────────────────────────────────────── */
+.dark {
+  --background:         oklch(0.11 0.018 340);
+  --foreground:         oklch(0.95 0.008 50);
+  --card:               oklch(0.15 0.016 340);
+  --card-foreground:    oklch(0.95 0.008 50);
+  --primary:            oklch(0.70 0.22 350);
+  --primary-foreground: oklch(0.98 0.005 340);
+  --secondary:          oklch(0.20 0.018 340);
+  --secondary-foreground: oklch(0.90 0.008 50);
+  --muted:              oklch(0.19 0.015 340);
+  --muted-foreground:   oklch(0.58 0.025 340);
+  --accent:             oklch(0.72 0.14 25);
+  --accent-foreground:  oklch(0.15 0.03 25);
+  --destructive:        oklch(0.62 0.2 22);
+  --destructive-foreground: oklch(0.99 0.005 340);
+  --border:             oklch(0.25 0.018 340);
+  --input:              oklch(0.20 0.015 340);
+  --ring:               oklch(0.70 0.22 350);
+  --status-amber-bg:    oklch(0.22 0.06 70);
+  --status-amber-fg:    oklch(0.82 0.14 72);
+  --status-sage-bg:     oklch(0.18 0.05 155);
+  --status-sage-fg:     oklch(0.72 0.12 155);
+  --status-warm-bg:     oklch(0.20 0.015 340);
+  --status-warm-fg:     oklch(0.65 0.02 340);
+  --status-rose-bg:     oklch(0.20 0.06 22);
+  --status-rose-fg:     oklch(0.72 0.14 22);
+  --status-gray-bg:     oklch(0.20 0.008 340);
+  --status-gray-fg:     oklch(0.60 0.01 340);
+  --shadow-gold:        0 4px 20px oklch(0.72 0.12 55 / 0.5);
+  color-scheme: dark;
+}
+
+/* ── Reset & base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ── Typography helpers ──────────────────────────────────────────────── */
+.serif { font-family: "Cormorant Garamond", Georgia, serif; }
+.label-mono {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Glass card ──────────────────────────────────────────────────────── */
+.paper-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+}
+
+/* ── Gradient button ─────────────────────────────────────────────────── */
+.btn-gold {
+  background: linear-gradient(135deg, oklch(0.78 0.16 58), oklch(0.68 0.14 32));
+  color: oklch(0.10 0.01 50);
+  box-shadow: var(--shadow-gold);
+}
+.btn-gold:hover { opacity: 0.92; }
+.btn-gold:active { transform: scale(0.98); }
+
+/* ── Animations ──────────────────────────────────────────────────────── */
+@keyframes fadeUp   { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes fadeIn   { from { opacity:0; }                              to { opacity:1; } }
+@keyframes spinAnim { to { transform: rotate(360deg); } }
+@keyframes pulseGlow { 0%,100% { opacity:.5; } 50% { opacity:1; } }
+@keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
+
+.animate-fade-up    { animation: fadeUp    .35s ease forwards; }
+.animate-fade-in    { animation: fadeIn    .25s ease forwards; }
+.animate-spin-icon  { animation: spinAnim  .7s linear infinite; }
+.animate-pulse-glow { animation: pulseGlow 3s ease infinite; }
+.animate-float      { animation: float     3s ease-in-out infinite; }
+
+/* ── App gradient background ─────────────────────────────────────────── */
+.bg-app {
+  background: var(--background);
+  min-height: 100dvh;
+}
+
+/* ── Page header gradient ────────────────────────────────────────────── */
+.page-glow {
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 0%,
+    oklch(0.72 0.12 55 / 0.10) 0%,
+    transparent 100%
+  );
+}
+
+/* ── Input shared ────────────────────────────────────────────────────── */
+.nd-input {
+  width: 100%;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--foreground);
+  outline: none;
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+.nd-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px oklch(from var(--primary) l c h / 0.15);
+}
+.nd-input::placeholder { color: var(--muted-foreground); }
+
+textarea.nd-input { resize: none; }
+select.nd-input { cursor: pointer; }

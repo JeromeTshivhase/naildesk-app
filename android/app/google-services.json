@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "643284352391",
+    "project_id": "naildesk-cd900",
+    "storage_bucket": "naildesk-cd900.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643284352391:android:a9aca6ac75263f31a4e722",
+        "android_client_info": {
+          "package_name": "app.naildesk.studio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxbsYTneDXZMh2Bcee-xNoKAX2sQLgK3s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
