@@ -5,14 +5,9 @@ import { SubscriptionBanner } from "./SubscriptionBanner";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  // Initialize WebSocket safely
-  let wsError: Error | null = null;
-  try {
-    useWebSocket();
-  } catch (e) {
-    wsError = e as Error;
-    console.error("[AppShell] WebSocket initialization error:", e);
-  }
+  // Hook must be called unconditionally at the top level (Rules of Hooks).
+  // The hook itself handles all internal errors — no try/catch wrapper needed.
+  useWebSocket();
 
   // Catch any unhandled errors in AppShell to prevent app crashes
   useEffect(() => {

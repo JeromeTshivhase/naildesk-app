@@ -90,7 +90,6 @@ api.interceptors.response.use(
         if (ok) return api(cfg);
 
         if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-          console.log("[API] 401 error and token refresh failed, logging user out");
           try {
             const { useAuth } = await import("./auth");
             useAuth.getState().logout();
@@ -162,7 +161,7 @@ export interface Profile {
   phone?: string;
   fullName: string;
   businessName: string;
-  isMobile?: boolean;
+  mobile?: boolean;
   address?: string;
   salonAddress?: string;
   bankName?: string;
@@ -179,7 +178,7 @@ export interface Profile {
 export interface Subscription {
   tier?: SubscriptionTier | string;
   status?: SubscriptionStatus | string;
-  isActive?: boolean;
+  active?: boolean;
   trialEndsAt?: string;
   trialDaysRemaining?: number;
   planName?: string;
@@ -225,4 +224,30 @@ export interface AvailabilityWindow {
   startTime: string;
   endTime: string;
   active?: boolean;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  monthlyBookingLimit: number | string; // Can be "Unlimited"
+  serviceLimit: number | string;
+  portfolioImageLimit: number | string;
+  depositCollection: boolean;
+  waitlist: boolean;
+  analytics: boolean;
+  whatsAppBot: boolean;
+  features: string[];
+}
+
+// Helper to check if a limit is unlimited
+export function isUnlimited(value: unknown): boolean {
+  return value === "Unlimited" || value === "UNLIMITED";
+}
+
+// Helper to format limit for display
+export function formatLimit(value: unknown): string {
+  if (isUnlimited(value)) return "Unlimited";
+  if (typeof value === "number") return String(value);
+  return String(value);
 }

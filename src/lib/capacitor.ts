@@ -186,7 +186,21 @@ async function initWebPush() {
   if (!("PushManager" in window)) return;
 
   try {
+    // Register our service worker if not already registered.
+    // navigator.serviceWorker.ready only resolves once a SW is controlling the page,
+    // so we must register first — previously this was never called, causing ready to hang.
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((e) => {
+      console.warn("[Push] SW registration failed:", e);
+    });
+
     const registration = await navigator.serviceWorker.ready;
+
+    // Forward SW NAVIGATE messages (from notification clicks) into the app router
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "NAVIGATE" && event.data.url) {
+        window.location.hash = event.data.url;
+      }
+    });
 
     // Request permission if not already granted
     if (Notification.permission === "default") {
@@ -438,7 +452,23 @@ export async function initPushNotifications(onMessage: PushCallback) {
   }
 }
 
-// ── Haptics helper ────────────────────────────────────────────────────────────
+// ── URL opener ───────────────────────────────────────────────────────────────
+// On native, use the Capacitor Browser plugin so the in-app browser handles
+// the PayFast payment flow. On web, fall back to a plain window.open.
+export async function openURL(url: string): Promise<void> {
+  if (isNative) {
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url, presentationStyle: "popover" });
+      return;
+    } catch (e) {
+      console.warn("[openURL] Capacitor Browser failed, falling back to window.open:", e);
+    }
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+
 export async function hapticImpact(style: "light" | "medium" | "heavy" = "light") {
   if (!isNative) return;
   try {

@@ -3,6 +3,12 @@ import { create } from "zustand";
 import { api } from "./api";
 import { Capacitor } from "@capacitor/core";
 
+// Dev-only logger — all calls are no-ops in production builds.
+// Vite's tree-shaker eliminates the dead branch at build time.
+const log = import.meta.env.DEV
+  ? (...args: unknown[]) => console.log("[Auth]", ...args)
+  : () => {};
+
 export interface AuthUser {
   id?: string;
   fullName?: string;
@@ -27,10 +33,10 @@ export function saveProfile(u: AuthUser | null): void {
   try {
     if (!u) {
       localStorage.removeItem(PROFILE_KEY);
-      console.log("[Auth] Cleared profile from storage");
+      log("Cleared profile from storage");
     } else {
       localStorage.setItem(PROFILE_KEY, JSON.stringify(u));
-      console.log("[Auth] Saved profile to storage:", u.id);
+      log("Saved profile to storage:", u.id);
     }
   } catch (e) {
     console.error("[Auth] Error saving profile:", e);
@@ -40,7 +46,7 @@ export function saveProfile(u: AuthUser | null): void {
 export function loadProfile(): AuthUser | null {
   try {
     const data = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "null");
-    console.log("[Auth] Loaded profile from storage:", data?.id ?? "null");
+    log("Loaded profile from storage:", data?.id ?? "null");
     return data as AuthUser | null;
   } catch (e) {
     console.error("[Auth] Error loading profile:", e);
@@ -52,11 +58,11 @@ export function saveTokens(access?: string, refresh?: string): void {
   try {
     if (access) {
       localStorage.setItem(TOKEN_KEY, access);
-      console.log("[Auth] Saved access token to storage");
+      log("Saved access token to storage");
     }
     if (refresh) {
       localStorage.setItem(REFRESH_KEY, refresh);
-      console.log("[Auth] Saved refresh token to storage");
+      log("Saved refresh token to storage");
     }
   } catch (e) {
     console.error("[Auth] Error saving tokens:", e);
@@ -66,7 +72,7 @@ export function saveTokens(access?: string, refresh?: string): void {
 export function loadToken(): string | null {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
-    console.log("[Auth] Loaded access token from storage:", token ? `${token.substring(0, 20)}...` : "null");
+    log("Loaded access token from storage:", token ? `${token.substring(0, 20)}...` : "null");
     return token;
   } catch (e) {
     console.error("[Auth] Error loading token:", e);
@@ -77,7 +83,7 @@ export function loadToken(): string | null {
 export function loadRefreshToken(): string | null {
   try {
     const token = localStorage.getItem(REFRESH_KEY);
-    console.log("[Auth] Loaded refresh token from storage:", token ? `${token.substring(0, 20)}...` : "null");
+    log("Loaded refresh token from storage:", token ? `${token.substring(0, 20)}...` : "null");
     return token;
   } catch (e) {
     console.error("[Auth] Error loading refresh token:", e);
@@ -89,25 +95,32 @@ export function clearTokens(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
-    console.log("[Auth] Cleared tokens from storage");
+    log("Cleared tokens from storage");
   } catch (e) {
     console.error("[Auth] Error clearing tokens:", e);
   }
 }
 
-// Inject Bearer token on every request when running natively
+// Inject Bearer token on every request
+// - On native: Always use Bearer token (primary auth method)
+// - On web: Use Bearer token if available (fallback to cookies)
 const isNative = Capacitor.isNativePlatform();
-console.log("[Auth] App running on:", isNative ? "NATIVE (Android/iOS)" : "WEB");
+log("App running on:", isNative ? "NATIVE (Android/iOS)" : "WEB");
 
 api.interceptors.request.use((config) => {
-  if (isNative) {
-    const token = loadToken();
-    if (token) {
-      console.log("[Auth] Adding Bearer token to request:", config.url);
-      config.headers = config.headers ?? {};
-      config.headers["Authorization"] = `Bearer ${token}`;
-    }
+  const token = loadToken();
+
+  if (token) {
+    // We have a valid token - use it
+    log("Adding Bearer token to request:", config.url);
+    config.headers = config.headers ?? {};
+    config.headers["Authorization"] = `Bearer ${token}`;
+  } else if (isNative) {
+    // Native app but no token - log it (should be in hydration state)
+    log("Native app but no token available for:", config.url);
   }
+  // On web with no token, rely on cookies (withCredentials: true in api.ts)
+
   return config;
 });
 
@@ -119,18 +132,18 @@ export const useAuth = create<AuthState>((set, get) => {
     authStatus: "loading",
 
     loginSuccess: (user, tokens) => {
-      console.log("[Auth] loginSuccess called with user:", user.id, "tokens:", !!tokens?.accessToken);
+      log("loginSuccess called with user:", user.id, "tokens:", !!tokens?.accessToken);
       saveProfile(user);
       if (tokens?.accessToken || tokens?.refreshToken) {
-        console.log("[Auth] Saving tokens, hasAccess:", !!tokens?.accessToken, "hasRefresh:", !!tokens?.refreshToken);
+        log("Saving tokens, hasAccess:", !!tokens?.accessToken, "hasRefresh:", !!tokens?.refreshToken);
         saveTokens(tokens.accessToken, tokens.refreshToken);
       }
-      console.log("[Auth] Setting state: authenticated");
+      log("Setting state: authenticated");
       set({ user, authStatus: "authenticated" });
     },
 
     logout: () => {
-      console.log("[Auth] logout called");
+      log("logout called");
       saveProfile(null);
       clearTokens();
       api.post("/auth/logout").catch(() => {
@@ -141,17 +154,17 @@ export const useAuth = create<AuthState>((set, get) => {
 
     hydrate: async () => {
       const state = get();
-      console.log("[Auth] Hydrate called, authStatus:", state.authStatus);
+      log("Hydrate called, authStatus:", state.authStatus);
 
       // Prevent concurrent hydrations
       if (hydrationPromise) {
-        console.log("[Auth] Hydration already in progress, waiting...");
+        log("Hydration already in progress, waiting...");
         return hydrationPromise;
       }
 
       // Skip if already authenticated
       if (state.authStatus === "authenticated") {
-        console.log("[Auth] Already authenticated, skipping hydration");
+        log("Already authenticated, skipping hydration");
         return;
       }
 
@@ -168,42 +181,62 @@ export const useAuth = create<AuthState>((set, get) => {
     const cached = loadProfile();
     const token = loadToken();
 
-    console.log("[Auth] Hydrate state: isNative=", isNative, "cached.id=", cached?.id, "hasToken=", !!token);
+    log("Hydrate state: isNative=", isNative, "cached.id=", cached?.id, "hasToken=", !!token);
 
-    // On native: if we have a cached user + token, trust it for immediate UI render
-    // but silently check if the token is expired and refresh in the background.
+    // On native: if we have a cached user + token, we need to validate it first
     if (isNative && cached?.id && token) {
-      console.log("[Auth] Using native auth path - rendering with cached data immediately");
-      set({ user: cached, authStatus: "authenticated" });
+      log("Using native auth path - validating cached token before marking authenticated");
 
-      // Background: check if JWT is expired and proactively refresh
-      try {
-        await refreshTokenIfExpired(token);
-      } catch (e) {
-        console.warn("[Auth] Silent background refresh failed:", e);
+      // Check if token is already expired
+      const isTokenExpired = await checkTokenExpiration(token);
+
+      if (isTokenExpired) {
+        log("Cached token is expired, attempting to refresh...");
+        try {
+          const refreshed = await refreshToken();
+          if (refreshed) {
+            log("Token refresh succeeded, marking authenticated");
+            set({ user: cached, authStatus: "authenticated" });
+            return;
+          } else {
+            console.warn("[Auth] Token refresh failed, clearing auth");
+            saveProfile(null);
+            clearTokens();
+            set({ user: null, authStatus: "unauthenticated" });
+            return;
+          }
+        } catch (e) {
+          console.error("[Auth] Error during token refresh:", e);
+          saveProfile(null);
+          clearTokens();
+          set({ user: null, authStatus: "unauthenticated" });
+          return;
+        }
+      } else {
+        log("Cached token is still valid, rendering immediately");
+        set({ user: cached, authStatus: "authenticated" });
+        return;
       }
-
-      return;
     }
 
     // Web: standard cookie-based flow - with retry logic
-    console.log("[Auth] Using web auth path (or native without cached token)");
+    log("Using web auth path (or native without cached token)");
     if (cached?.id) {
-      console.log("[Auth] Have cached user, keeping it");
+      log("Have cached user, keeping it");
       set({ user: cached, authStatus: "loading" });
     }
 
     try {
-      console.log("[Auth] Calling /auth/me to verify session");
+      log("Calling /auth/me to verify session");
       const { data } = await api.get<Partial<AuthUser>>("/auth/me");
       const user: AuthUser = {
         id:           data.id,
         fullName:     data.fullName,
         businessName: data.businessName,
-        isMobile:     data.isMobile,
+        isMobile:     (data as any).mobile ?? data.isMobile,
         phone:        data.phone,
       };
-      console.log("[Auth] /auth/me succeeded, setting authenticated");
+      log("/auth/me succeeded, setting authenticated");
       saveProfile(user);
       set({ user, authStatus: "authenticated" });
     } catch (e) {
@@ -211,20 +244,20 @@ export const useAuth = create<AuthState>((set, get) => {
       const status = (e as any)?.response?.status;
       console.warn("[Auth] Hydration failed (status:", status, "):", errMsg);
 
-      // On 401, clear auth
-      if (status === 401) {
-        console.log("[Auth] Got 401, clearing auth");
+      // On 401 or 403, clear auth (real auth failure)
+      if (status === 401 || status === 403) {
+        log("Got", status, ", clearing auth (session expired or invalid)");
         saveProfile(null);
         clearTokens();
         set({ user: null, authStatus: "unauthenticated" });
       } else {
-        // On other errors, keep cached user if available (network error, server error)
-        console.log("[Auth] Non-401 error, keeping cached user if available");
+        // On other errors (5xx, network), keep cached user if available (server issue, not auth)
+        log("Non-auth error (status", status, "), checking if we can keep cached user");
         if (cached?.id) {
-          console.log("[Auth] Keeping cached user despite error");
+          log("Keeping cached user despite error - likely temporary server issue");
           set({ user: cached, authStatus: "authenticated" });
         } else {
-          console.log("[Auth] No cached user, logging out");
+          log("No cached user, logging out");
           saveProfile(null);
           clearTokens();
           set({ user: null, authStatus: "unauthenticated" });
@@ -233,12 +266,12 @@ export const useAuth = create<AuthState>((set, get) => {
     }
   }
 
-  async function refreshTokenIfExpired(token: string): Promise<void> {
+  async function checkTokenExpiration(token: string): Promise<boolean> {
     try {
       const parts = token.split(".");
       if (parts.length < 2) {
-        console.warn("[Auth] Invalid token format");
-        return;
+        console.warn("[Auth] Invalid token format, treating as expired");
+        return true;
       }
 
       // Safely decode JWT payload
@@ -248,25 +281,51 @@ export const useAuth = create<AuthState>((set, get) => {
       const expiresInSeconds = exp - nowSeconds;
 
       if (expiresInSeconds < 60) {
-        // Expired or expiring within 60 seconds — refresh silently
-        console.log("[Auth] Native token expired/expiring, attempting silent refresh");
-        const rt = loadRefreshToken();
-        const { API_BASE } = await import("./api");
-        if (rt) {
-          const { data } = await axios.post<{ accessToken: string; refreshToken: string }>(
-              `${API_BASE}/auth/refresh`,
-              {},
-              { headers: { Authorization: `Bearer ${rt}` } }
-          );
-          saveTokens(data.accessToken, data.refreshToken);
-          console.log("[Auth] Silent token refresh succeeded");
-        }
+        log("Token expired or expiring within 60 seconds");
+        return true;
       } else {
-        console.log("[Auth] Native token still valid for", expiresInSeconds, "seconds");
+        log("Token valid for", expiresInSeconds, "more seconds");
+        return false;
       }
     } catch (e) {
-      // Refresh failed — let the per-request interceptor handle 401s
-      console.warn("[Auth] Background refresh failed:", e);
+      console.error("[Auth] Error checking token expiration:", e);
+      return true; // Treat errors as expired to be safe
     }
   }
+
+  async function refreshToken(): Promise<boolean> {
+    try {
+      const rt = loadRefreshToken();
+      if (!rt) {
+        console.warn("[Auth] No refresh token available");
+        return false;
+      }
+
+      log("Attempting to refresh token with refresh token");
+      const { API_BASE } = await import("./api");
+      const { data } = await axios.post<{ accessToken: string; refreshToken: string }>(
+          `${API_BASE}/auth/refresh`,
+          {},
+          { headers: { Authorization: `Bearer ${rt}` } }
+      );
+
+      if (data?.accessToken && data?.refreshToken) {
+        saveTokens(data.accessToken, data.refreshToken);
+        log("Token refresh succeeded");
+        return true;
+      } else {
+        console.warn("[Auth] Refresh response missing tokens");
+        return false;
+      }
+    } catch (e) {
+      const status = (e as any)?.response?.status;
+      const errMsg = (e as any)?.message ?? String(e);
+      console.error("[Auth] Token refresh failed (status:", status, "):", errMsg);
+
+      // Clear tokens on any refresh error (network, server, auth)
+      clearTokens();
+      return false;
+    }
+  }
+
 });

@@ -12,8 +12,10 @@ import {
 } from "./lib/capacitor";
 import { getInitialThemeMode, resolveTheme } from "./lib/theme";
 
-// Import push test utilities (available in console as window.pushTests)
-import "./lib/pushTestUtils";
+// Push test utilities — development only (stripped from production builds)
+if (import.meta.env.DEV) {
+  import("./lib/pushTestUtils");
+}
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },

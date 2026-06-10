@@ -32,7 +32,6 @@ export default function LoginPage() {
      },
       onSuccess: (data) => {
         try {
-          console.log("[Login] Login successful, processing response");
           if (!data || (!data.techId && !data.user?.id)) {
             console.error("[Login] No user ID in response:", data);
             toast.error("Invalid response from server. Please try again.");
@@ -51,16 +50,10 @@ export default function LoginPage() {
             refreshToken: data.refreshToken,
           };
 
-          console.log("[Login] Calling loginSuccess with user ID:", user.id);
           loginSuccess(user, tokens);
 
           toast.success("Welcome back");
-          console.log("[Login] Navigation to home");
-          // Use setTimeout to ensure state is updated before navigation
-          setTimeout(() => {
-            console.log("[Login] Navigating to home");
-            nav("/", { replace: true });
-          }, 50);
+          nav("/", { replace: true });
         } catch (e) {
           console.error("[Login] Error during login success handler:", e);
           toast.error("An error occurred. Please try again.");

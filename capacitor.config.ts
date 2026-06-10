@@ -18,7 +18,7 @@ const config: CapacitorConfig = {
       launchAutoHide: false,
       backgroundColor: "#fff5f9",
       androidSplashResourceName: "splash",
-      androidScaleType: "CENTER_CROP",
+      androidScaleType: "CENTER",
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
@@ -41,8 +41,8 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
     captureInput: true,
-    webContentsDebuggingEnabled: true,
-    loggingBehavior: "debug",
+    webContentsDebuggingEnabled: false,
+    loggingBehavior: "none",
     initialFocus: true,
   },
 

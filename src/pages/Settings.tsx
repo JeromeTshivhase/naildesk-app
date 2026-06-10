@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -11,6 +11,7 @@ import { api, type Profile, type Service, type Subscription, type AvailabilityWi
 import { useAuth } from "../lib/auth";
 import { useTheme, type ThemeMode } from "../lib/theme";
 import { useNotifications } from "../stores/notifications";
+import { openURL } from "../lib/capacitor";
 import {
   GlassCard, Skeleton, Button, FormField, Input,
   Textarea, Select, PageHeader, BackButton, Avatar, Toggle,
@@ -101,7 +102,7 @@ export function SettingsPage() {
                 <>
                   <h1 className="serif" style={{ fontSize:26, fontWeight:400, marginTop:14 }}>{p?.fullName}</h1>
                   <p style={{ fontSize:13, color:"var(--muted-foreground)", fontWeight:300 }}>
-                    {p?.businessName}{p?.isMobile ? " · Mobile tech" : ""}
+                    {p?.businessName}{p?.mobile ? " · Mobile tech" : ""}
                   </p>
                   <SubBadge tier={tier} status={status} style={{ marginTop:8, display:"inline-flex" }} />
                 </>
@@ -328,7 +329,7 @@ export function ProfileEditPage() {
   const nav = useNavigate();
   const qc  = useQueryClient();
   const [loaded, setLoaded] = useState(false);
-  const [form, setForm]     = useState<Partial<Profile & { isMobile?: boolean }>>({});
+  const [form, setForm]     = useState<Partial<Profile>>({});
 
   useQuery<Profile>({
     queryKey: ["profile"],
@@ -372,8 +373,8 @@ export function ProfileEditPage() {
                 <p style={{ fontSize:12, color:"var(--muted-foreground)" }}>I travel to clients</p>
               </div>
               <Toggle
-                  checked={!!(form.isMobile ?? form.mobile)}
-                  onChange={(v) => set("isMobile", v)}
+                  checked={!!form.mobile}
+                  onChange={(v) => set("mobile", v)}
               />
             </div>
           </GlassCard>
@@ -664,7 +665,7 @@ function DateOverrideTab() {
   });
 
   // Fetch overrides for next 60 days on mount
-  useState(() => {
+  useEffect(() => {
     (async () => {
       setLoadingOverrides(true);
       const today = new Date();
@@ -681,7 +682,7 @@ function DateOverrideTab() {
       setOverrides(all.sort((a,b) => a.date.localeCompare(b.date)));
       setLoadingOverrides(false);
     })();
-  });
+  }, []);
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -832,37 +833,111 @@ function DateOverrideTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Subscription
 // ─────────────────────────────────────────────────────────────────────────────
-const PLANS = [
-  { tier:"FREE",  name:"Free",  price:"R 0/mo",   features:["5 bookings/mo","1 service","Basic client list"] },
-  { tier:"GROW",  name:"Grow",  price:"R 149/mo",  features:["50 bookings/mo","5 services","Deposit collection","Waitlist"] },
-  { tier:"PRO",   name:"Pro",   price:"R 299/mo",  features:["Unlimited bookings","Unlimited services","Full analytics","WhatsApp bot"] },
-] as const;
-
 export function SubscriptionPage() {
   const nav = useNavigate();
+  const qc  = useQueryClient();
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  // Keep the poll interval in a ref so it's cleaned up if the component unmounts
+  // before payment is confirmed (avoids setState-on-unmounted-component and memory leak).
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { data: sub, isLoading } = useQuery<Subscription>({
+  // Clear any running poll on unmount
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  }, []);
+
+  const { data: sub, isLoading: subLoading } = useQuery<Subscription>({
     queryKey: ["subscription"],
     queryFn: async () => (await api.get("/tech/subscription/status")).data,
     staleTime: 60_000,
   });
 
+  const { data: plans, isLoading: plansLoading } = useQuery({
+    queryKey: ["subscription-plans"],
+    queryFn: async () => {
+      const response = await api.get<any[]>("/tech/subscription/plans");
+      return response.data.sort((a, b) => {
+        // Sort: FREE, GROW, PRO
+        const order = { FREE: 0, GROW: 1, PRO: 2 };
+        return (order[a.id as keyof typeof order] ?? 99) - (order[b.id as keyof typeof order] ?? 99);
+      });
+    },
+    staleTime: Infinity, // Plans don't change often
+  });
+
   async function upgrade(tier: string) {
+    // The /upgrade endpoint only accepts GROW or PRO; FREE is display-only.
+    if (tier === "FREE") return;
+
     setUpgrading(tier);
     try {
-      await api.post("/tech/subscription/upgrade", { plan: tier });
-      toast.success("Upgrade initiated — you'll receive a payment link via WhatsApp.");
-    } catch {
-      toast.error("Could not initiate upgrade. Please try again.");
+      const response = await api.post<{ paymentUrl?: string; message?: string }>("/tech/subscription/upgrade", { tier });
+      const paymentUrl = response.data?.paymentUrl;
+
+      if (paymentUrl) {
+        toast.success("Opening PayFast payment...");
+
+        await openURL(paymentUrl).catch((e) => {
+          console.error("[Settings] Failed to open payment URL:", e);
+          toast.error("Could not open payment page. Please try again.");
+        });
+
+        // Poll for payment confirmation every 2 s for up to 5 minutes.
+        // Keep the interval ID in a ref so the cleanup effect can cancel it
+        // if the user navigates away before the webhook fires.
+        // Also: do NOT call setUpgrading(null) until confirmed (or timed out)
+        // so the loading spinner stays visible while polling.
+        const maxAttempts = 150;
+        let attempts = 0;
+
+        if (pollRef.current) clearInterval(pollRef.current); // clear any previous poll
+        pollRef.current = setInterval(async () => {
+          attempts++;
+          try {
+            const { data: subStatus } = await api.get<Subscription>("/tech/subscription/status");
+            if (subStatus?.tier === tier && subStatus?.status === "ACTIVE") {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+              toast.success(`✅ Upgraded to ${tier} successfully!`);
+              // Invalidate all subscription-related queries so every consumer refreshes
+              qc.invalidateQueries({ queryKey: ["subscription"] });
+              qc.invalidateQueries({ queryKey: ["subscription-plans"] });
+              qc.invalidateQueries({ queryKey: ["profile"] });
+              setUpgrading(null);
+              return;
+            }
+          } catch (e) {
+            console.error("[Settings] Error checking payment status:", e);
+          }
+
+          if (attempts >= maxAttempts) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            toast.info("Payment processing… you'll see the update shortly.");
+            setUpgrading(null);
+          }
+        }, 2000);
+
+        // Don't fall through to the finally block's setUpgrading(null)
+        // while the poll is still running — return here.
+        return;
+      } else {
+        toast.success("Upgrade initiated — you'll receive a payment link via WhatsApp.");
+      }
+    } catch (e) {
+      const errMsg = (e as any)?.response?.data?.message ?? "Could not initiate upgrade";
+      toast.error(errMsg);
     } finally {
-      setUpgrading(null);
+      // Only clear the spinner if we're NOT in the polling path (poll manages it itself).
+      if (!pollRef.current) setUpgrading(null);
     }
   }
 
   const currentTier = (sub?.tier ?? "FREE") as string;
+  const isLoading = subLoading || plansLoading;
 
   return (
       <div>
@@ -873,7 +948,7 @@ export function SubscriptionPage() {
         <PageHeader eyebrow="Account" title="Subscription" subtitle="Choose the plan that fits your studio." />
         <div style={{ padding:"0 20px" }}>
           {/* Current status */}
-          {isLoading ? <Skeleton style={{ height:110, marginBottom:16 }} /> : (
+          {subLoading ? <Skeleton style={{ height:110, marginBottom:16 }} /> : (
               <GlassCard style={{ padding:20, marginBottom:20 }} glow>
                 <p className="label-mono" style={{ color:"var(--primary)", marginBottom:4 }}>Current plan</p>
                 <h2 className="serif" style={{ fontSize:28, fontWeight:400 }}>{(sub as any)?.planName ?? currentTier}</h2>
@@ -888,39 +963,78 @@ export function SubscriptionPage() {
 
           {/* Plan cards */}
           <p className="label-mono" style={{ marginBottom:12 }}>Upgrade your plan</p>
-          {PLANS.map((plan) => {
-            const isCurrent = currentTier === plan.tier;
-            return (
-                <GlassCard key={plan.tier}
-                           style={{ padding:16, marginBottom:10, border: isCurrent ? "1.5px solid var(--primary)" : "1px solid var(--border)" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-                    <div>
-                      <p style={{ fontSize:16, fontWeight:600 }}>{plan.name}</p>
-                      <p className="serif" style={{ fontSize:20, fontWeight:400, color:"var(--primary)", marginTop:2 }}>
-                        {plan.price}
-                      </p>
-                    </div>
-                    {isCurrent
-                        ? <span className="label-mono" style={{ background:"var(--status-sage-bg)", color:"var(--status-sage-fg)", borderRadius:99, padding:"3px 10px" }}>Current</span>
-                        : null
-                    }
-                  </div>
-                  <ul style={{ paddingLeft:0, listStyle:"none", display:"flex", flexDirection:"column", gap:4, marginBottom:isCurrent ? 0 : 12 }}>
-                    {plan.features.map((f) => (
-                        <li key={f} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"var(--muted-foreground)", fontWeight:300 }}>
-                          <Zap size={12} style={{ color:"var(--primary)", flexShrink:0 }} /> {f}
-                        </li>
-                    ))}
-                  </ul>
-                  {!isCurrent && (
-                      <Button variant="gold" fullWidth loading={upgrading === plan.tier}
-                              onClick={() => upgrade(plan.tier)}>
-                        Upgrade to {plan.name}
-                      </Button>
-                  )}
-                </GlassCard>
-            );
-          })}
+          {plansLoading ? (
+              [1, 2, 3].map((i) => <Skeleton key={i} style={{ height:260, marginBottom:12 }} />)
+          ) : !plans || plans.length === 0 ? (
+              <GlassCard style={{ padding:20, textAlign:"center" }}>
+                <p style={{ color:"var(--muted-foreground)" }}>Could not load subscription plans.</p>
+              </GlassCard>
+          ) : (
+              plans.map((plan) => {
+                const isCurrent = currentTier === plan.id;
+                return (
+                    <GlassCard key={plan.id}
+                               style={{ padding:16, marginBottom:10, border: isCurrent ? "1.5px solid var(--primary)" : "1px solid var(--border)" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                        <div>
+                          <p style={{ fontSize:16, fontWeight:600 }}>{plan.name}</p>
+                          <p className="serif" style={{ fontSize:20, fontWeight:400, color:"var(--primary)", marginTop:2 }}>
+                            R {plan.price}/mo
+                          </p>
+                        </div>
+                        {isCurrent
+                            ? <span className="label-mono" style={{ background:"var(--status-sage-bg)", color:"var(--status-sage-fg)", borderRadius:99, padding:"3px 10px" }}>Current</span>
+                            : null
+                        }
+                      </div>
+
+                      {/* Limits summary */}
+                      <div style={{ background:"var(--secondary)", borderRadius:"var(--radius)", padding:12, marginBottom:12, fontSize:12, color:"var(--muted-foreground)" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                          <div>
+                            <p className="label-mono" style={{ fontSize:10, marginBottom:2 }}>Bookings/month</p>
+                            <p style={{ fontWeight:500, color:"var(--foreground)" }}>{plan.monthlyBookingLimit}</p>
+                          </div>
+                          <div>
+                            <p className="label-mono" style={{ fontSize:10, marginBottom:2 }}>Services</p>
+                            <p style={{ fontWeight:500, color:"var(--foreground)" }}>{plan.serviceLimit}</p>
+                          </div>
+                          <div>
+                            <p className="label-mono" style={{ fontSize:10, marginBottom:2 }}>Portfolio images</p>
+                            <p style={{ fontWeight:500, color:"var(--foreground)" }}>{plan.portfolioImageLimit}</p>
+                          </div>
+                          <div>
+                            <p className="label-mono" style={{ fontSize:10, marginBottom:2 }}>Features</p>
+                            <p style={{ fontWeight:500, color:"var(--foreground)" }}>
+                              {[
+                                plan.depositCollection && "Deposits",
+                                plan.waitlist && "Waitlist",
+                                plan.analytics && "Analytics",
+                                plan.whatsAppBot && "WhatsApp",
+                              ].filter(Boolean).join(" • ") || "Basic"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Features list */}
+                      <ul style={{ paddingLeft:0, listStyle:"none", display:"flex", flexDirection:"column", gap:4, marginBottom:isCurrent ? 0 : 12 }}>
+                        {plan.features.map((f: string) => (
+                            <li key={f} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"var(--muted-foreground)", fontWeight:300 }}>
+                              <Zap size={12} style={{ color:"var(--primary)", flexShrink:0 }} /> {f}
+                            </li>
+                        ))}
+                      </ul>
+                      {!isCurrent && plan.id !== "FREE" && (
+                          <Button variant="gold" fullWidth loading={upgrading === plan.id}
+                                  onClick={() => upgrade(plan.id)}>
+                            Upgrade to {plan.name}
+                          </Button>
+                      )}
+                    </GlassCard>
+                );
+              })
+          )}
         </div>
       </div>
   );

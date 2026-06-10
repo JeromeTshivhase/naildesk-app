@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom
 import { useAuth } from "./lib/auth";
 import { AppShell } from "./components/AppShell";
 import { Loader2 } from "lucide-react";
-import { initPushNotifications, initStatusBar, requestNotificationPermission } from "./lib/capacitor";
+import { initPushNotifications, initStatusBar } from "./lib/capacitor";
 import { useNotifications } from "./stores/notifications";
 import { getInitialThemeMode, resolveTheme } from "./lib/theme";
 
@@ -42,24 +42,17 @@ function SplashScreen() {
         background:"var(--background)",
       }}>
         <div className="animate-fade-in" style={{ textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:0 }}>
-          {/* Logo mark only — transparent PNG, no background */}
+          {/* Combined logo (includes mark + wordmark text) */}
           <img
               src="/brand/naildesk-logo.png"
               alt="NailDesk"
-              width={80} height={80}
+              width={280} height={180}
               style={{ objectFit:"contain", display:"block" }}
-              onError={(e) => { e.currentTarget.style.display="none"; }}
-          />
-          {/* Wordmark below logo */}
-          <img
-              src="/brand/naildesk-wordmark-transparent.png"
-              alt="NailDesk"
-              style={{ height:28, width:"auto", objectFit:"contain", marginTop:8, display:"block" }}
               onError={(e) => {
                 e.currentTarget.style.display="none";
                 const h = document.createElement("h1");
                 h.className = "serif";
-                h.style.cssText = "font-size:36px;font-weight:400;line-height:1;margin-top:8px;";
+                h.style.cssText = "font-size:36px;font-weight:400;line-height:1;";
                 h.innerHTML = `Nail<span style="color:var(--primary);font-style:italic">Desk</span>`;
                 e.currentTarget.parentElement?.appendChild(h);
               }}
@@ -126,16 +119,6 @@ export default function App() {
       console.error("[App] Error setting up theme observer:", e);
     }
   }, []);
-
-  // Step 1 — request notification permission immediately on login.
-  // This must happen without delay so Android shows the POST_NOTIFICATIONS
-  // runtime dialog. LocalNotifications is used directly (no Firebase needed).
-  useEffect(() => {
-    if (authStatus !== "authenticated") return;
-    requestNotificationPermission().catch((e) => {
-      console.error("[App] Error requesting notification permission:", e);
-    });
-  }, [authStatus]);
 
   // Step 2 — init the full push stack after the app has stabilised.
   useEffect(() => {

@@ -103,7 +103,7 @@ function ApptListCard({ appt }: { appt: Appointment }) {
   const nav  = useNavigate();
   const name = appt.client?.fullName ?? appt.clientName ?? "Client";
   const svc  = appt.service?.name   ?? appt.serviceName ?? "Service";
-  const price = appt.price ?? appt.service?.price ?? appt.servicePrice;
+  const price = appt.price ?? appt.service?.price;
   return (
     <GlassCard style={{ cursor:"pointer", overflow:"hidden", position:"relative", transition:"transform .15s" }}
       onClick={() => nav(`/appointments/${appt.id}`)}
@@ -172,9 +172,20 @@ export function AppointmentDetailPage() {
 
   const rescheduleMut = useMutation({
     mutationFn: async () =>
-      (await api.patch(`/tech/appointments/${id}/reschedule`, { newStartTime: fmt.localIso(newDate, newTime) })).data,
+      (await api.post(`/tech/appointments/${id}/reschedule`, { newStartTime: fmt.localIso(newDate, newTime) })).data,
     onSuccess: () => { invalidate(); setShowReschedule(false); toast.success("Rescheduled"); },
     onError: () => toast.error("Could not reschedule"),
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: async (reason?: string) =>
+      (await api.post(`/tech/appointments/${id}/cancel`, reason ? { reason } : {})).data,
+    onSuccess: () => {
+      invalidate();
+      setShowCancel(false);
+      toast.success("Booking cancelled");
+    },
+    onError: () => toast.error("Could not cancel booking"),
   });
 
   const noShowMut = useMutation({
@@ -189,7 +200,7 @@ export function AppointmentDetailPage() {
   const name  = data.client?.fullName ?? data.clientName ?? "Client";
   const phone = data.client?.phone   ?? data.clientPhone;
   const svc   = data.service?.name   ?? data.serviceName ?? "Service";
-  const price = data.price ?? data.service?.price ?? data.servicePrice;
+  const price = data.price ?? data.service?.price;
   const isTerminal = TERMINAL.has(data.status);
 
   return (
@@ -303,8 +314,8 @@ export function AppointmentDetailPage() {
                 <p style={{ fontSize:13, fontWeight:500, marginBottom:10 }}>Reason (optional)</p>
                 <Textarea rows={2} placeholder="Reason for cancellation…" value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)} style={{ marginBottom:10 }} />
-                <Button variant="danger" fullWidth loading={statusMut.isPending}
-                  onClick={() => statusMut.mutate({ status:"CANCELLED", cancelReason })}>
+                <Button variant="danger" fullWidth loading={cancelMut.isPending}
+                  onClick={() => cancelMut.mutate(cancelReason || undefined)}>
                   Confirm cancellation
                 </Button>
               </GlassCard>
