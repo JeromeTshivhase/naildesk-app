@@ -59,6 +59,15 @@ type PushCallback = (payload: { type: string; message: string; appointmentId?: s
 // NOTE: intentionally NOT guarding re-init so FCM token refresh always reaches backend
 let _localNotificationsInitialized = false;
 
+// Tracks notification types recently delivered by FCM (foreground) so the
+// STOMP handler can skip posting a duplicate local notification.
+const _recentFcmDeliveries = new Set<string>();
+
+/** Returns true if FCM already handled a notification of this type within the last 3 seconds. */
+export function wasFcmRecentlyDelivered(type: string): boolean {
+  return _recentFcmDeliveries.has(type);
+}
+
 /**
  * Returns true if the JWT stored in localStorage is expired (or missing/unparseable).
  * Used to detect stale tokens before posting to /push/subscribe.
@@ -80,6 +89,51 @@ function isStoredJwtExpired(): boolean {
   } catch (e) {
     console.warn("[Push] Could not decode JWT expiry:", e);
     return false; // let the interceptor handle it
+  }
+}
+
+/**
+ * Create Android notification channels.
+ * Must be called before any notification is scheduled — on Android 8+ (API 26+)
+ * the channel is the sole source of truth for importance, sound, and vibration.
+ * Per-notification priority flags are silently ignored without a channel.
+ *
+ * Channels are idempotent: calling createChannel() for an existing channel is a no-op
+ * unless the user has manually changed the channel settings in system preferences,
+ * in which case Android preserves the user's choice.
+ */
+async function createNotificationChannels() {
+  if (platform !== "android") return;
+  try {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+
+    // High-importance channel — new bookings, deposits, urgent alerts.
+    // IMPORTANCE_HIGH (4) = shows as heads-up notification with sound + vibration.
+    await LocalNotifications.createChannel({
+      id: "naildesk_bookings",
+      name: "Bookings & Payments",
+      description: "New bookings, deposits received, and appointment updates",
+      importance: 4,          // IMPORTANCE_HIGH
+      sound: "default",
+      vibration: true,
+      visibility: 1,          // VISIBILITY_PUBLIC
+    });
+
+    // Default-importance channel — general info, reminders.
+    // IMPORTANCE_DEFAULT (3) = sound but no heads-up pop-over.
+    await LocalNotifications.createChannel({
+      id: "naildesk_general",
+      name: "General Alerts",
+      description: "Reminders and general notifications",
+      importance: 3,          // IMPORTANCE_DEFAULT
+      sound: "default",
+      vibration: true,
+      visibility: 1,
+    });
+
+    console.info("[Push] Notification channels created");
+  } catch (e) {
+    console.warn("[Push] Failed to create notification channels:", e);
   }
 }
 
@@ -151,20 +205,37 @@ async function initLocalNotificationsFallback(onMessage: PushCallback) {
 }
 
 /**
- * Show a local notification as fallback
+ * Show a local notification as fallback (also called from useWebSocket for
+ * foreground/background STOMP messages on Android so a native OS notification
+ * is always posted, not just an in-app toast).
  */
-async function showLocalNotificationFallback(payload: { type: string; message: string; appointmentId?: string; clientName?: string }) {
+export async function showLocalNotificationFallback(payload: { type: string; message: string; appointmentId?: string; clientName?: string }) {
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
 
+    // Route to the correct channel so Android honours the right importance level.
+    const highPriorityTypes = ["APPOINTMENT_BOOKED", "DEPOSIT_RECEIVED", "APPOINTMENT_CONFIRMED"];
+    const channelId = highPriorityTypes.includes(payload.type)
+        ? "naildesk_bookings"
+        : "naildesk_general";
+
+    // Map internal event types to human-readable titles.
+    const titleMap: Record<string, string> = {
+      APPOINTMENT_BOOKED:    "New Booking 📅",
+      APPOINTMENT_CONFIRMED: "Booking Confirmed ✅",
+      DEPOSIT_RECEIVED:      "Deposit Received 💰",
+      APPOINTMENT_CANCELLED: "Booking Cancelled",
+      APPOINTMENT_REMINDER:  "Upcoming Appointment 🔔",
+    };
+    const title = titleMap[payload.type] ?? "Naildesk";
+
     await LocalNotifications.schedule({
       notifications: [{
-        title: payload.message.split("\n")[0],
+        title,
         body: payload.message,
         id: Math.floor(Math.random() * 10000),
         smallIcon: "ic_stat_naildesk",
-        largeBody: payload.message,
-        summaryText: payload.type,
+        channelId,
         extra: {
           type: payload.type,
           message: payload.message,
@@ -312,6 +383,13 @@ export async function initPushNotifications(onMessage: PushCallback) {
   // Every authStatus→authenticated transition should re-register so the
   // backend always has a fresh token.
 
+  // Ensure channels exist before ANY notification can arrive (FCM or local).
+  // Must run before requestPermissions and before initLocalNotificationsFallback
+  // so the first notification posted always has a valid channel on Android 8+.
+  await createNotificationChannels().catch((e) => {
+    console.warn("[Push] Failed to pre-create notification channels:", e);
+  });
+
   // Initialize local notifications as fallback for all platforms
   await initLocalNotificationsFallback(onMessage).catch((e) => {
     console.warn("[Push] Failed to initialize local notifications fallback:", e);
@@ -395,14 +473,18 @@ export async function initPushNotifications(onMessage: PushCallback) {
       console.warn("[Push] Failed to add registration error listener:", e);
     }
 
-    // Foreground notification received
+    // Foreground notification received — FCM is silent when app is open,
+    // so we post a local notification ourselves. We also feed it into the
+    // in-app store so the bell updates immediately.
     try {
       await PushNotifications.addListener("pushNotificationReceived", (notification) => {
         try {
           const data = notification.data ?? {};
           const payload = {
             type: data.type ?? "APPOINTMENT_BOOKED",
-            message: notification.body ?? notification.title ?? "New notification",
+            // Prefer the structured data.message from the FCM data payload.
+            // Fall back to notification.body only if data.message is absent.
+            message: data.message ?? notification.body ?? notification.title ?? "New notification",
             appointmentId: data.appointmentId,
             clientName: data.clientName,
           };
@@ -410,7 +492,13 @@ export async function initPushNotifications(onMessage: PushCallback) {
           console.info("[Push] Foreground FCM/APNs notification received:", payload.type);
           onMessage(payload);
 
-          // Also show as local notification for consistency
+          // Mark this type as recently handled by FCM so the STOMP handler
+          // doesn't post a duplicate local notification.
+          _recentFcmDeliveries.add(payload.type);
+          setTimeout(() => _recentFcmDeliveries.delete(payload.type), 3000);
+
+          // Show as local notification so the user sees it while the app is open.
+          // (FCM notifications are suppressed by Android when the app is in the foreground.)
           showLocalNotificationFallback(payload).catch(() => {});
         } catch (e) {
           console.warn("[Push] Error handling foreground notification:", e);
@@ -420,14 +508,16 @@ export async function initPushNotifications(onMessage: PushCallback) {
       console.warn("[Push] Failed to add foreground notification listener:", e);
     }
 
-    // Notification tapped (app was backgrounded)
+    // Notification tapped (app was backgrounded or killed).
+    // Android already showed the FCM notification — do NOT post another local one.
+    // Just update the in-app store and navigate to the relevant screen.
     try {
       await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         try {
           const data = action.notification.data ?? {};
           const payload = {
             type: data.type ?? "APPOINTMENT_BOOKED",
-            message: action.notification.body ?? "Notification tapped",
+            message: data.message ?? action.notification.body ?? "Notification tapped",
             appointmentId: data.appointmentId,
             clientName: data.clientName,
           };

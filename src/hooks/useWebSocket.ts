@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { useNotifications, type NotifType } from "../stores/notifications";
 import { WS_URL, isNative } from "../lib/api";
 import { loadToken } from "../lib/auth";
+import { showLocalNotificationFallback, wasFcmRecentlyDelivered } from "../lib/capacitor";
 import { toast } from "sonner";
 
 const KNOWN_TYPES = new Set(["DEPOSIT_RECEIVED", "APPOINTMENT_CONFIRMED", "APPOINTMENT_BOOKED"]);
@@ -71,14 +72,21 @@ export function useWebSocket() {
                 try {
                   const data = JSON.parse(msg.body);
                   const type: NotifType = KNOWN_TYPES.has(data.type) ? data.type : "APPOINTMENT_BOOKED";
-                  addNotif({
+                  const payload = {
                     type,
                     message: data.message || "New notification",
                     appointmentId: data.appointmentId,
                     clientName: data.clientName,
-                  });
-                  // Show a toast as well
+                  };
+                  addNotif(payload);
+                  // Show a toast for in-app feedback
                   toast.info(data.message || "New notification", { duration: 4000 });
+                  // On Android, post a native notification — but only if FCM hasn't
+                  // already handled it in the last 3 seconds (avoids duplicates when
+                  // both FCM and STOMP fire while the app is in the foreground).
+                  if (isNative && !wasFcmRecentlyDelivered(payload.type)) {
+                    showLocalNotificationFallback(payload).catch(() => {});
+                  }
                 } catch {
                   if ((import.meta as any).env?.DEV) console.warn("[STOMP] bad payload");
                 }
