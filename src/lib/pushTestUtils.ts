@@ -28,15 +28,14 @@ export async function testLocalNotification(payload: Partial<PushNotificationPay
     await LocalNotifications.schedule({
       notifications: [{
         title: notification.type === "DEPOSIT_RECEIVED"
-          ? "Payment Received"
-          : notification.type === "APPOINTMENT_CONFIRMED"
-          ? "Appointment Confirmed"
-          : "New Appointment Booking",
+            ? "Deposit Received 💰"
+            : notification.type === "APPOINTMENT_CONFIRMED"
+                ? "Booking Confirmed ✅"
+                : "New Booking 📅",
         body: notification.message,
         id: Math.floor(Math.random() * 10000),
         smallIcon: "ic_stat_naildesk",
-        largeBody: notification.message,
-        summaryText: notification.type,
+        channelId: "naildesk_bookings",
         extra: notification,
       }],
     });
@@ -138,4 +137,3 @@ if (typeof window !== "undefined") {
     getDeviceToken,
   };
 }
-

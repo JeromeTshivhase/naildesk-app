@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">NailDesk</string>
     <string name="title_activity_main">NailDesk</string>
-    <string name="package_name">app.naildesk.studio</string>
-    <string name="custom_url_scheme">app.naildesk.studio</string>
+    <string name="package_name">com.naildesk.app</string>
+    <string name="custom_url_scheme">com.naildesk.app</string>
 </resources>

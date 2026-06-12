@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Plus, Phone, CheckCircle2, XCircle, Clock, CalendarX, RotateCcw } from "lucide-react";
+import { Plus, Phone, CheckCircle2, XCircle, Clock, CalendarX, RotateCcw, Link2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   api, type Appointment, type AppointmentStatus,
@@ -194,6 +194,18 @@ export function AppointmentDetailPage() {
     onError: () => toast.error("Could not mark no-show"),
   });
 
+  const depositLinkMut = useMutation({
+    mutationFn: async () =>
+      (await api.post<{ slug: string; url: string }>(`/tech/appointments/${id}/resend-deposit`)).data,
+    onSuccess: (data) => {
+      const url = data.url ?? `https://naildesk.app/pay/${data.slug}`;
+      navigator.clipboard.writeText(url)
+        .then(() => toast.success("Payment link copied to clipboard"))
+        .catch(() => toast.success(`Payment link: ${url}`));
+    },
+    onError: () => toast.error("Could not get payment link"),
+  });
+
   if (isLoading) return <div style={{ padding:20 }}><Skeleton style={{ height:300 }} /></div>;
   if (!data)    return <div style={{ padding:20, textAlign:"center" }}><p>Not found</p></div>;
 
@@ -288,11 +300,32 @@ export function AppointmentDetailPage() {
             </Button>
 
             {data.status === "AWAITING_DEPOSIT" && (
-              <Button variant="gold" fullWidth
-                style={{ background:"linear-gradient(135deg, oklch(0.72 0.12 155), oklch(0.55 0.10 160))", color:"#fff" }}
-                onClick={() => statusMut.mutate({ status:"CONFIRMED" })}>
-                <CheckCircle2 size={16} /> Confirm booking
-              </Button>
+              <>
+                <Button variant="gold" fullWidth
+                  style={{ background:"linear-gradient(135deg, oklch(0.72 0.12 155), oklch(0.55 0.10 160))", color:"#fff" }}
+                  onClick={() => statusMut.mutate({ status:"CONFIRMED" })}>
+                  <CheckCircle2 size={16} /> Confirm booking
+                </Button>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <Button variant="outline" loading={depositLinkMut.isPending}
+                    onClick={() => depositLinkMut.mutate()}>
+                    <Link2 size={15} /> Copy link
+                  </Button>
+                  <Button variant="outline" loading={depositLinkMut.isPending}
+                    onClick={async () => {
+                      const res = await depositLinkMut.mutateAsync().catch(() => null);
+                      if (!res) return;
+                      const url = res.url ?? `https://naildesk.app/pay/${res.slug}`;
+                      if (navigator.share) {
+                        navigator.share({ title:"Deposit payment", url }).catch(() => {});
+                      } else {
+                        window.open(url, "_blank");
+                      }
+                    }}>
+                    <RefreshCw size={15} /> Resend
+                  </Button>
+                </div>
+              </>
             )}
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
