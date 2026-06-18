@@ -157,13 +157,19 @@ export default function App() {
   return (
       <BrowserRouter>
         <Routes>
-          {/* Public routes */}
+          {/* Public client-facing payment pages — no auth required — MUST BE FIRST */}
+          <Route path="/pay/:slug"          element={<PaymentPage />} />
+          <Route path="/payment-success"    element={<PaymentSuccessPage />} />
+          <Route path="/payment-failed"     element={<PaymentFailedPage />} />
+          <Route path="/payment-cancelled"  element={<PaymentCancelledPage />} />
+
+          {/* Public auth routes */}
           <Route element={<RedirectIfAuth />}>
             <Route path="/login"    element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
           </Route>
 
-          {/* Protected routes */}
+          {/* Protected app routes */}
           <Route element={<RequireAuth />}>
             <Route path="/"     element={<HomePage />} />
 
@@ -189,11 +195,6 @@ export default function App() {
             <Route path="/settings/emergency"    element={<EmergencyPage />} />
           </Route>
 
-          {/* Public client-facing payment pages — no auth required */}
-          <Route path="/pay/:slug"          element={<PaymentPage />} />
-          <Route path="/payment-success"    element={<PaymentSuccessPage />} />
-          <Route path="/payment-failed"     element={<PaymentFailedPage />} />
-          <Route path="/payment-cancelled"  element={<PaymentCancelledPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
