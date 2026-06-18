@@ -29,6 +29,8 @@
           document.documentElement.classList.add('light');
         }
       })();
+      // Register service worker IMMEDIATELY for SPA routing
+      if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(e=>console.warn('[SW]',e))}
     </script>
   </head>
   <body>

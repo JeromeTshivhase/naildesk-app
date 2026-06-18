@@ -25,8 +25,8 @@ self.addEventListener("activate", (event) => {
 });
 
 // ── SPA Routing Fallback ───────────────────────────────────────────
-// Serve index.html for all navigation requests that don't exist
-// This allows React Router to handle all SPA routes including /payment-success, /payment-failed, etc.
+// For ANY navigation request (including /payment-success, /payment-failed, etc),
+// try to fetch it first. If it fails or returns 404, serve index.html for SPA routing.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
@@ -35,31 +35,37 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Skip API and external requests
+  // Skip API and WebSocket requests - let them fail naturally
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/ws")) return;
 
-  // Skip asset files (they should exist)
-  if (/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|ico|webp)$/i.test(url.pathname)) return;
+  // Skip service worker and manifest files
+  if (url.pathname === "/sw.js" || url.pathname === "/manifest.json") return;
 
-  // For navigation requests (HTML pages), try the request first, then fall back to index.html
-  if (request.mode === "navigate" || request.headers.get("Accept")?.includes("text/html")) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // If successful, return the response
-          if (response.status === 200) return response;
-          // If 404, serve index.html for SPA routing
-          if (response.status === 404) {
-            return fetch(new Request("/index.html"));
-          }
-          return response;
-        })
-        .catch(() => {
-          // On network error, try to serve index.html
-          return fetch(new Request("/index.html"));
-        })
-    );
-  }
+  // For asset files, don't apply fallback - let 404 happen
+  if (/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|ico|webp|json)$/i.test(url.pathname)) return;
+
+  // For everything else (HTML pages, SPA routes), handle with fallback
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        // If successful, return the response
+        if (response.ok) return response;
+
+        // For 404 on navigation requests, serve index.html for SPA routing
+        if (response.status === 404 && (request.mode === "navigate" || request.headers.get("Accept")?.includes("text/html"))) {
+          return fetch("/index.html");
+        }
+
+        return response;
+      })
+      .catch(() => {
+        // On any error (network, etc), serve index.html if it's a navigation request
+        if (request.mode === "navigate" || request.headers.get("Accept")?.includes("text/html")) {
+          return fetch("/index.html").catch(() => new Response("Offline", { status: 503 }));
+        }
+        throw new Error("Fetch failed");
+      })
+  );
 });
 
 // ── Push notification handler ──────────────────────────────────────────────
