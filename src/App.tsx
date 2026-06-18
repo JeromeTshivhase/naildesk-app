@@ -7,8 +7,10 @@ import { initPushNotifications, initStatusBar } from "./lib/capacitor";
 import { useNotifications } from "./stores/notifications";
 import { getInitialThemeMode, resolveTheme } from "./lib/theme";
 
-import PaymentPage   from "./pages/PaymentPage";
-import PaymentSuccessPage from "./pages/PaymentSuccess";
+import PaymentPage          from "./pages/PaymentPage";
+import PaymentSuccessPage   from "./pages/PaymentSuccess";
+import PaymentFailedPage    from "./pages/PaymentFailed";
+import PaymentCancelledPage from "./pages/PaymentCancelled";
 import LoginPage    from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import HomePage     from "./pages/Home";
@@ -188,8 +190,10 @@ export default function App() {
           </Route>
 
           {/* Public client-facing payment pages — no auth required */}
-          <Route path="/pay/:slug"        element={<PaymentPage />} />
-          <Route path="/payment-success"  element={<PaymentSuccessPage />} />
+          <Route path="/pay/:slug"          element={<PaymentPage />} />
+          <Route path="/payment-success"    element={<PaymentSuccessPage />} />
+          <Route path="/payment-failed"     element={<PaymentFailedPage />} />
+          <Route path="/payment-cancelled"  element={<PaymentCancelledPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
