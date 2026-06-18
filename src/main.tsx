@@ -17,6 +17,15 @@ if (import.meta.env.DEV) {
   import("./lib/pushTestUtils");
 }
 
+// Register service worker immediately for SPA routing support (public payment pages, etc.)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/sw.js", { scope: "/" })
+    .catch((e) => {
+      console.warn("[SW] Registration failed:", e);
+    });
+}
+
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
