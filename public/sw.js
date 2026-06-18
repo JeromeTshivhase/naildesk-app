@@ -6,7 +6,7 @@
 
 const CACHE_VERSION = "naildesk-v1";
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
+// ── Lifecycle ──────────────────────────────────────────────────────
 self.addEventListener("install", (event) => {
   // Activate immediately — don't wait for old tabs to close
   self.skipWaiting();
@@ -22,6 +22,44 @@ self.addEventListener("activate", (event) => {
       )
     ).then(() => self.clients.claim())
   );
+});
+
+// ── SPA Routing Fallback ───────────────────────────────────────────
+// Serve index.html for all navigation requests that don't exist
+// This allows React Router to handle all SPA routes including /payment-success, /payment-failed, etc.
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  // Only handle GET requests
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // Skip API and external requests
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/ws")) return;
+
+  // Skip asset files (they should exist)
+  if (/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|ico|webp)$/i.test(url.pathname)) return;
+
+  // For navigation requests (HTML pages), try the request first, then fall back to index.html
+  if (request.mode === "navigate" || request.headers.get("Accept")?.includes("text/html")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // If successful, return the response
+          if (response.status === 200) return response;
+          // If 404, serve index.html for SPA routing
+          if (response.status === 404) {
+            return fetch(new Request("/index.html"));
+          }
+          return response;
+        })
+        .catch(() => {
+          // On network error, try to serve index.html
+          return fetch(new Request("/index.html"));
+        })
+    );
+  }
 });
 
 // ── Push notification handler ──────────────────────────────────────────────

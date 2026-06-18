@@ -10,6 +10,7 @@ const config: CapacitorConfig = {
     hostname: "naildesk.app",
     allowNavigation: ["naildesk-api-prod.up.railway.app", "*.up.railway.app"],
     cleartext: false,
+    errorHandler: "native",
   },
 
   plugins: {
