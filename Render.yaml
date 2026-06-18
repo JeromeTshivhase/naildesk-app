@@ -25,6 +25,18 @@ services:
         name: Cache-Control
         value: no-cache
     routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+       - type: rewrite
+         source: /payment-success
+         destination: /index.html
+       - type: rewrite
+         source: /payment-failed
+         destination: /index.html
+       - type: rewrite
+         source: /payment-cancelled
+         destination: /index.html
+       - type: rewrite
+         source: /pay/*
+         destination: /index.html
+       - type: rewrite
+         source: /*
+         destination: /index.html
