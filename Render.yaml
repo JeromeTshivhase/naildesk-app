@@ -27,18 +27,18 @@ services:
     routes:
       # Payment pages - explicit rewrite for external access (WhatsApp, Paystack redirects)
       - type: rewrite
-        source: /payment-success*
+        source: ^/payment-success
         destination: /index.html
       - type: rewrite
-        source: /payment-failed*
+        source: ^/payment-failed
         destination: /index.html
       - type: rewrite
-        source: /payment-cancelled*
+        source: ^/payment-cancelled
         destination: /index.html
       - type: rewrite
-        source: /pay/*
+        source: ^/pay/
         destination: /index.html
       # Catch-all for all other routes (SPA fallback)
       - type: rewrite
-        source: /*
+        source: ^/
         destination: /index.html
