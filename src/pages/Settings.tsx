@@ -4,10 +4,10 @@ import { useNavigate } from "react-router-dom";
 import {
   ChevronRight, User, Building2, CalendarClock, Crown,
   AlertTriangle, LogOut, Plus, X, Zap, Bell, Sun, Moon, Monitor,
-  Pencil, Calendar, RefreshCw,
+  Pencil, Calendar, RefreshCw, Camera, ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api, type Profile, type Service, type Subscription, type AvailabilityWindow } from "../lib/api";
+import { api, type Profile, type Service, type Subscription, type AvailabilityWindow, uploadImage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useTheme, type ThemeMode } from "../lib/theme";
 import { useNotifications } from "../stores/notifications";
@@ -243,8 +243,12 @@ export function SettingsPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 function ServicesWidget() {
   const qc = useQueryClient();
-  const [adding, setAdding] = useState(false);
-  const [form, setForm]     = useState({ name:"", durationMinutes:60, price:0, requiresDeposit:false });
+  const fileRef                   = useRef<HTMLInputElement>(null);
+  const [adding, setAdding]       = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [form, setForm]           = useState({ name: "", durationMinutes: 60, price: 0, requiresDeposit: false, imageUrl: "" });
+
+  const emptyForm = { name: "", durationMinutes: 60, price: 0, requiresDeposit: false, imageUrl: "" };
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: ["services"],
@@ -254,67 +258,120 @@ function ServicesWidget() {
 
   const createMut = useMutation({
     mutationFn: async () => (await api.post("/tech/services", form)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey:["services"] }); setAdding(false); toast.success("Service added"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setAdding(false); setForm(emptyForm); toast.success("Service added"); },
     onError: () => toast.error("Could not add service"),
   });
 
   const deleteMut = useMutation({
     mutationFn: async (id: string) => api.delete(`/tech/services/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey:["services"] }); toast.success("Removed"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); toast.success("Removed"); },
     onError: () => toast.error("Could not remove"),
   });
 
+  async function handlePickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { secureUrl } = await uploadImage(file);
+      setForm((f) => ({ ...f, imageUrl: secureUrl }));
+      toast.success("Photo ready");
+    } catch {
+      toast.error("Photo upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
       <>
-        <GlassCard style={{ overflow:"hidden", padding:0 }}>
+        <GlassCard style={{ overflow: "hidden", padding: 0 }}>
           {isLoading
-              ? <Skeleton style={{ height:80, margin:16 }} />
+              ? <Skeleton style={{ height: 80, margin: 16 }} />
               : (services ?? []).map((s, i, arr) => (
                   <div key={s.id}
-                       style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", borderBottom: i < arr.length-1 ? "1px solid var(--border)" : "none" }}>
-                    <div>
-                      <p style={{ fontSize:14, fontWeight:500 }}>{s.name}</p>
-                      <p style={{ fontSize:12, color:"var(--muted-foreground)" }}>{s.durationMinutes} min</p>
+                       style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none" }}>
+                    {/* Thumbnail */}
+                    <div style={{ width: 44, height: 44, borderRadius: "var(--radius)", flexShrink: 0, background: "var(--muted)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {s.imageUrl
+                          ? <img src={s.imageUrl} alt={s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <ImageIcon size={18} color="var(--muted-foreground)" />
+                      }
                     </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                      <span className="serif" style={{ fontSize:18, fontWeight:500 }}>{fmt.currency(Number(s.price))}</span>
+                    {/* Name + duration */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</p>
+                      <p style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{s.durationMinutes} min</p>
+                    </div>
+                    {/* Price + delete */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+                      <span className="serif" style={{ fontSize: 18, fontWeight: 500 }}>{fmt.currency(Number(s.price))}</span>
                       <button
                           onClick={() => { if (confirm(`Remove "${s.name}"?`)) deleteMut.mutate(s.id); }}
                           aria-label={`Remove ${s.name}`}
-                          style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted-foreground)", display:"flex", alignItems:"center", padding:0 }}>
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", display: "flex", alignItems: "center", padding: 0 }}>
                         <X size={16} />
                       </button>
                     </div>
                   </div>
               ))
           }
-          <div style={{ padding:"10px 16px" }}>
+          <div style={{ padding: "10px 16px" }}>
             <button
                 onClick={() => setAdding(!adding)}
-                style={{ width:"100%", padding:"9px", border:"1px dashed var(--border)", borderRadius:"var(--radius)", background:"transparent", cursor:"pointer", fontSize:13, color:"var(--primary)", fontWeight:500, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                style={{ width: "100%", padding: "9px", border: "1px dashed var(--border)", borderRadius: "var(--radius)", background: "transparent", cursor: "pointer", fontSize: 13, color: "var(--primary)", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Plus size={14} /> Add service
             </button>
           </div>
         </GlassCard>
 
         {adding && (
-            <GlassCard style={{ padding:16, marginTop:8 }}>
+            <GlassCard style={{ padding: 16, marginTop: 8 }}>
+              {/* Cover photo */}
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginBottom: 6 }}>Cover photo (optional)</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: "var(--radius)", background: "var(--muted)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {form.imageUrl
+                        ? <img src={form.imageUrl} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <Camera size={20} color="var(--muted-foreground)" />
+                    }
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handlePickImage} />
+                    <button
+                        onClick={() => fileRef.current?.click()}
+                        disabled={uploading}
+                        style={{ padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "transparent", cursor: uploading ? "wait" : "pointer", fontSize: 12, color: "var(--foreground)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <Camera size={13} />
+                      {uploading ? "Uploading…" : form.imageUrl ? "Change photo" : "Upload photo"}
+                    </button>
+                    {form.imageUrl && (
+                        <button onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))} style={{ padding: "4px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 11, color: "var(--muted-foreground)", textAlign: "left" }}>
+                          Remove
+                        </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <FormField label="Service name">
-                <Input placeholder="e.g. Gel manicure" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name:e.target.value }))} autoFocus />
+                <Input placeholder="e.g. Gel manicure" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
               </FormField>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <FormField label="Duration (min)">
-                  <Input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes:Number(e.target.value) }))} />
+                  <Input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: Number(e.target.value) }))} />
                 </FormField>
                 <FormField label="Price (R)">
-                  <Input type="number" value={form.price || ""} placeholder="0" onChange={(e) => setForm((f) => ({ ...f, price:Number(e.target.value) }))} />
+                  <Input type="number" value={form.price || ""} placeholder="0" onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))} />
                 </FormField>
               </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <Button variant="gold" fullWidth loading={createMut.isPending} onClick={() => createMut.mutate()}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button variant="gold" fullWidth loading={createMut.isPending || uploading} onClick={() => createMut.mutate()}>
                   Add service
                 </Button>
-                <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+                <Button variant="ghost" onClick={() => { setAdding(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
             </GlassCard>
         )}
@@ -322,9 +379,6 @@ function ServicesWidget() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Profile edit
-// ─────────────────────────────────────────────────────────────────────────────
 export function ProfileEditPage() {
   const nav = useNavigate();
   const qc  = useQueryClient();

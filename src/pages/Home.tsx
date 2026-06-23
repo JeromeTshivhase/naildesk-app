@@ -6,6 +6,7 @@ import { api, type Appointment, type Subscription } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { GlassCard, StatusPill, Skeleton, Avatar, SectionTitle, accentColor } from "../components/ui";
 import { NotificationPrompt } from "../components/NotificationPrompt";
+import { SetupGuideButton, SetupGuideAutoPrompt } from "../components/SetupGuide";
 import { fmt } from "../lib/fmt";
 
 export default function HomePage() {
@@ -26,7 +27,12 @@ export default function HomePage() {
 
     const apptQ = useQuery<Appointment[]>({
         queryKey: ["appointments", "today"],
-        queryFn: async () => (await api.get("/tech/appointments/today")).data,
+        queryFn: async () => {
+            const res = await api.get<Appointment[] | { appointments: Appointment[] }>("/tech/appointments/today");
+            const data = res.data;
+            // Handle both array and wrapped response
+            return Array.isArray(data) ? data : (data as any)?.appointments ?? [];
+        },
         staleTime: 60_000,
     });
 
@@ -62,7 +68,10 @@ export default function HomePage() {
                 <div style={{ position:"absolute", inset:0, pointerEvents:"none", background:"radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0.72 0.12 55 / 0.14) 0%, transparent 100%)" }} />
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, position:"relative" }}>
                     <span className="label-mono" style={{ color:"var(--muted-foreground)" }}>{today}</span>
-                    <SubBadge sub={sub} />
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <SubBadge sub={sub} />
+                        <SetupGuideButton />
+                    </div>
                 </div>
                 <h1 className="serif" style={{ fontSize:48, lineHeight:.92, fontWeight:400, position:"relative" }}>
                     {greet},<br />
@@ -72,6 +81,9 @@ export default function HomePage() {
                     Here's your day at a glance.
                 </p>
             </header>
+
+            {/* First-run setup checklist (auto-shows until dismissed once) */}
+            <SetupGuideAutoPrompt />
 
             {/* Notification Permission Prompt */}
             <NotificationPrompt />

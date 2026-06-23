@@ -19,8 +19,11 @@ export function ClientsPage() {
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ["clients", search],
-    queryFn: async () =>
-      (await api.get("/tech/clients", { params: { search: search.trim() || undefined } })).data,
+    queryFn: async () => {
+      const res = await api.get<Client[] | { clients: Client[] }>("/tech/clients", { params: { search: search.trim() || undefined } });
+      const responseData = res.data;
+      return Array.isArray(responseData) ? responseData : (responseData as any)?.clients ?? [];
+    },
     staleTime: 30_000,
   });
 

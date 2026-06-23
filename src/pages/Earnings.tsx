@@ -66,7 +66,11 @@ export default function EarningsPage() {
 
   const dailyQ = useQuery<DailyEarningsLog[]>({
     queryKey: ["earnings","daily", start, end],
-    queryFn: async () => (await api.get("/tech/earnings/daily", { params:{ start, end } })).data,
+    queryFn: async () => {
+      const res = await api.get<DailyEarningsLog[] | { dailyLogs: DailyEarningsLog[] }>("/tech/earnings/daily", { params:{ start, end } });
+      const responseData = res.data;
+      return Array.isArray(responseData) ? responseData : (responseData as any)?.dailyLogs ?? [];
+    },
     staleTime: 60_000,
   });
 
