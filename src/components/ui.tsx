@@ -87,7 +87,12 @@ export function Button({
 }
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
-export function Avatar({ initials, size = 36 }: { initials: string; size?: number }) {
+interface AvatarProps extends HTMLAttributes<HTMLSpanElement> {
+  initials: string;
+  size?: number;
+}
+
+export function Avatar({ initials, size = 36, style, ...rest }: AvatarProps) {
   return (
     <span style={{
       width:size, height:size, borderRadius:"50%", flexShrink:0,
@@ -96,7 +101,8 @@ export function Avatar({ initials, size = 36 }: { initials: string; size?: numbe
       display:"flex", alignItems:"center", justifyContent:"center",
       fontSize:size*0.33, fontWeight:600, color:"oklch(0.72 0.12 55)",
       fontFamily:"Cormorant Garamond, serif",
-    }}>
+      ...style,
+    }} {...rest}>
       {initials}
     </span>
   );

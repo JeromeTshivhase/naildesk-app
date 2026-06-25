@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Phone, Lock, Eye, EyeOff } from "lucide-react";
+import { Phone, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,11 +8,11 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { GlassCard, Button } from "../components/ui";
+import { Button } from "../components/ui";
 
 const schema = z.object({
   phone:    z.string().min(7, "Phone required"),
-  password: z.string().min(6, "Min 6 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 type Form = z.infer<typeof schema>;
 
@@ -25,152 +25,228 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
   });
 
-   const login = useMutation({
-     mutationFn: async (v: Form) => {
-       const { data } = await api.post("/auth/login", { phone: v.phone.replace(/\s/g, ""), password: v.password });
-       return data;
-     },
-      onSuccess: (data) => {
-        try {
-          if (!data || (!data.techId && !data.user?.id)) {
-            console.error("[Login] No user ID in response:", data);
-            toast.error("Invalid response from server. Please try again.");
-            return;
-          }
-
-          const user = {
-            id: data.techId ?? data.user?.id,
-            fullName: data.fullName ?? data.user?.fullName,
-            businessName: data.user?.businessName,
-            isMobile: data.user?.mobile ?? data.user?.isMobile,
-            phone: data.user?.phone,
-          };
-          const tokens = {
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken,
-          };
-
-          loginSuccess(user, tokens);
-
-          toast.success("Welcome back");
-          nav("/", { replace: true });
-        } catch (e) {
-          console.error("[Login] Error during login success handler:", e);
-          toast.error("An error occurred. Please try again.");
+  const login = useMutation({
+    mutationFn: async (v: Form) => {
+      const { data } = await api.post("/auth/login", {
+        phone: v.phone.replace(/\s/g, ""),
+        password: v.password
+      });
+      return data;
+    },
+    onSuccess: (data) => {
+      try {
+        if (!data || (!data.techId && !data.user?.id)) {
+          toast.error("Authentication mapping failed");
+          return;
         }
-      },
-     onError: (e: any) => {
-       console.error("[Login] Login error:", e);
-       toast.error(e?.response?.data?.message ?? "Sign-in failed");
-     },
-   });
+        loginSuccess({
+          id: data.techId ?? data.user?.id,
+          fullName: data.fullName ?? data.user?.fullName,
+          businessName: data.businessName ?? data.user?.businessName,
+          isMobile: data.isMobile ?? data.user?.isMobile ?? data.user?.mobile,
+          phone: data.phone ?? data.user?.phone,
+        }, {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+        });
+        nav("/", { replace: true });
+      } catch (err) {
+        toast.error("Session configuration error");
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Invalid phone or password");
+    }
+  });
 
   return (
-    <div style={{
-      minHeight:"100dvh", display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center",
-      padding:"40px 24px",
-      background:"radial-gradient(ellipse 80% 55% at 50% 0%, oklch(0.94 0.045 25) 0%, transparent 62%), var(--background)",
-      position:"relative", overflow:"hidden",
-    }}>
-      {/* Ambient glow */}
-      <div className="animate-pulse-glow" style={{
-        position:"absolute", inset:0, pointerEvents:"none",
-        background:"radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.72 0.12 55 / 0.08) 0%, transparent 70%)",
-      }} />
-      <div style={{
-        position:"absolute", bottom:0, left:0, right:0, height:200, pointerEvents:"none",
-        background:"radial-gradient(ellipse 60% 40% at 50% 100%, oklch(0.78 0.08 340 / 0.1) 0%, transparent 70%)",
-      }} />
+      <div
+          style={{
+            minHeight: "100dvh",
+            width: "100%",
+            display: "grid",
+            position: "relative",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            WebkitTouchCallout: "none"
+          }}
+          className="bg-app page-glow lg-grid-split animate-fade-in standalone-safe-bounds"
+      >
 
-      <div style={{ width:"100%", maxWidth:400, position:"relative" }}>
-        {/* Logo */}
-        <div className="animate-float" style={{ textAlign:"center", marginBottom:36 }}>
-          <img
-            src="/brand/naildesk-wordmark-transparent.png"
-            alt="NailDesk"
-            style={{ height:44, width:"auto", objectFit:"contain", margin:"0 auto", display:"block" }}
-            onError={(e) => {
-              // Fallback to text wordmark
-              const el = e.currentTarget;
-              el.style.display = "none";
-              const parent = el.parentElement!;
-              const h = document.createElement("h1");
-              h.className = "serif";
-              h.style.cssText = "font-size:48px;font-weight:400;line-height:1;";
-              h.innerHTML = `Nail<span style="color:var(--primary);font-style:italic">Desk</span>`;
-              parent.appendChild(h);
+        {/* Editorial Left Hero Panel (Hidden on standalone mobile installation viewports) */}
+        <div
+            className="hero-side border-r"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              padding: "48px",
+              position: "relative",
+              overflow: "hidden",
+              borderColor: "var(--border)",
+              background: "radial-gradient(ellipse 100% 100% at 0% 0%, var(--muted) 0%, transparent 80%)",
             }}
-          />
-          <p className="label-mono" style={{ color:"var(--muted-foreground)", marginTop:8 }}>
-            Studio management
-          </p>
+        >
+          <div style={{ position: "relative", zIndex: 10 }}>
+            <img
+                src="/brand/naildesk-wordmark-transparent.png"
+                alt="NailDesk"
+                style={{ height: "36px", objectFit: "contain" }}
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          </div>
+
+          <div style={{ position: "relative", zIndex: 10, maxWidth: "340px", margin: "auto 0" }} className="animate-fade-up">
+            <h2 className="serif" style={{ fontSize: "38px", fontWeight: 400, letterSpacing: "-0.01em", lineHeight: "1.2", marginBottom: "16px" }}>
+              The workspace for elite <span style={{ color: "var(--primary)", fontStyle: "italic" }}>nail professionals.</span>
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--muted-foreground)", lineHeight: "1.6", fontWeight: 300 }}>
+              Automate deposit management, client validation parameters, and portfolio generation in one interface.
+            </p>
+          </div>
+
+          <div className="label-mono" style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", gap: "8px", color: "var(--muted-foreground)" }}>
+            <ShieldCheck size={14} style={{ color: "var(--primary)" }} />
+            Secured by NailDesk Ledger Core
+          </div>
         </div>
 
-        <GlassCard style={{ padding:28, position:"relative", overflow:"hidden" }}>
-          {/* Top shimmer line */}
-          <div style={{
-            position:"absolute", top:0, left:32, right:32, height:1, borderRadius:99,
-            background:"linear-gradient(90deg, transparent, oklch(0.72 0.12 55 / 0.6), transparent)",
-          }} />
+        {/* Interactive Authentication Segment */}
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "40px 24px", position: "relative" }}>
+          <div style={{ width: "100%", maxWidth: "380px", margin: "0 auto" }}>
 
-          <h1 className="serif" style={{ fontSize:28, fontWeight:400, marginBottom:4 }}>Welcome back</h1>
-          <p style={{ fontSize:13, color:"var(--muted-foreground)", fontWeight:300, marginBottom:24 }}>Sign in to your studio.</p>
-
-          <form onSubmit={handleSubmit((v) => login.mutate(v))} noValidate style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            {/* Phone */}
-            <div>
-              <label className="label-mono" style={{ display:"block", marginBottom:6, color: errors.phone ? "var(--destructive)" : "var(--muted-foreground)" }}>Phone</label>
-              <div style={{ display:"flex", alignItems:"center", gap:10, background:"var(--input)", border:`1px solid ${errors.phone ? "var(--destructive)" : "var(--border)"}`, borderRadius:"var(--radius)", padding:"0 12px", transition:"border-color .15s" }}
-                onFocusCapture={(e) => (e.currentTarget.style.borderColor = errors.phone ? "var(--destructive)" : "var(--primary)")}
-                onBlurCapture={(e) => (e.currentTarget.style.borderColor = errors.phone ? "var(--destructive)" : "var(--border)")}
-              >
-                <Phone size={14} style={{ color:"var(--muted-foreground)", flexShrink:0 }} />
-                <input
-                  type="tel" autoComplete="tel"
-                  placeholder="082 123 4567"
-                  style={{ flex:1, background:"transparent", border:"none", outline:"none", padding:"12px 0", fontSize:14, color:"var(--foreground)", fontFamily:"'SF Mono',monospace", letterSpacing:".04em" }}
-                  {...register("phone")}
+            {/* Header Typography Group */}
+            <div style={{ marginBottom: "28px" }}>
+              <div className="logo-mobile" style={{ marginBottom: "24px" }}>
+                <img
+                    src="/brand/naildesk-wordmark-transparent.png"
+                    alt="NailDesk"
+                    style={{ height: "32px", objectFit: "contain" }}
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
                 />
               </div>
-              {errors.phone && <p style={{ fontSize:12, color:"var(--destructive)", marginTop:4 }}>{errors.phone.message}</p>}
+              <h1 className="serif animate-fade-up" style={{ fontSize: "32px", fontWeight: 400, marginBottom: "6px" }}>
+                Welcome back
+              </h1>
+              <p style={{ fontSize: "13px", color: "var(--muted-foreground)", fontWeight: 300 }}>
+                Enter your credentials to open your administrative workspace.
+              </p>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="label-mono" style={{ display:"block", marginBottom:6, color: errors.password ? "var(--destructive)" : "var(--muted-foreground)" }}>Password</label>
-              <div style={{ display:"flex", alignItems:"center", gap:10, background:"var(--input)", border:`1px solid ${errors.password ? "var(--destructive)" : "var(--border)"}`, borderRadius:"var(--radius)", padding:"0 12px" }}
-                onFocusCapture={(e) => (e.currentTarget.style.borderColor = errors.password ? "var(--destructive)" : "var(--primary)")}
-                onBlurCapture={(e) => (e.currentTarget.style.borderColor = errors.password ? "var(--destructive)" : "var(--border)")}
-              >
-                <Lock size={14} style={{ color:"var(--muted-foreground)", flexShrink:0 }} />
-                <input
-                  type={showPw ? "text" : "password"} autoComplete="current-password"
-                  placeholder="••••••••"
-                  style={{ flex:1, background:"transparent", border:"none", outline:"none", padding:"12px 0", fontSize:14, color:"var(--foreground)", fontFamily:"'SF Mono',monospace", letterSpacing:".04em" }}
-                  {...register("password")}
-                />
-                <button type="button" onClick={() => setShowPw(!showPw)} aria-label={showPw ? "Hide" : "Show"}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted-foreground)", display:"flex", alignItems:"center" }}>
-                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-              {errors.password && <p style={{ fontSize:12, color:"var(--destructive)", marginTop:4 }}>{errors.password.message}</p>}
+            {/* Form Wrapped in your native .paper-card utility */}
+            <div className="paper-card animate-fade-up" style={{ padding: "28px", animationDelay: "0.1s" }}>
+              <form onSubmit={handleSubmit((v) => login.mutate(v))} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+
+                {/* Phone Entry Component */}
+                <div>
+                  <label className="label-mono" style={{ display: "block", marginBottom: "6px", color: "var(--muted-foreground)" }}>
+                    Phone Connection Vector
+                  </label>
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <span style={{ position: "absolute", left: "14px", color: "var(--muted-foreground)", display: "flex", alignItems: "center" }}>
+                    <Phone size={14} />
+                  </span>
+                    <input
+                        type="tel"
+                        autoComplete="username"
+                        placeholder="+27 82 123 4567"
+                        className="nd-input"
+                        style={{ paddingLeft: "38px", userSelect: "text", WebkitUserSelect: "text" }}
+                        {...register("phone")}
+                    />
+                  </div>
+                  {errors.phone && (
+                      <p style={{ fontSize: "11px", fontFamily: "var(--label-mono)", color: "var(--destructive)", marginTop: "5px" }}>{errors.phone.message}</p>
+                  )}
+                </div>
+
+                {/* Password Entry Component */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
+                    <label className="label-mono" style={{ color: "var(--muted-foreground)" }}>
+                      Security Passkey
+                    </label>
+                    <Link to="/forgot" style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 500, textDecoration: "none" }} className="label-mono">
+                      Forgot?
+                    </Link>
+                  </div>
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <span style={{ position: "absolute", left: "14px", color: "var(--muted-foreground)", display: "flex", alignItems: "center" }}>
+                    <Lock size={14} />
+                  </span>
+                    <input
+                        type={showPw ? "text" : "password"}
+                        autoComplete="current-password"
+                        placeholder="••••••••"
+                        className="nd-input"
+                        style={{
+                          paddingLeft: "38px",
+                          paddingRight: "40px",
+                          letterSpacing: showPw ? "normal" : "0.15em",
+                          userSelect: "text",
+                          WebkitUserSelect: "text"
+                        }}
+                        {...register("password")}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPw(!showPw)}
+                        aria-label={showPw ? "Hide password" : "Show password"}
+                        style={{ position: "absolute", right: "14px", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 0 }}
+                    >
+                      {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  {errors.password && (
+                      <p style={{ fontSize: "11px", fontFamily: "var(--label-mono)", color: "var(--destructive)", marginTop: "5px" }}>{errors.password.message}</p>
+                  )}
+                </div>
+
+                {/* Action Trigger Button */}
+                <Button
+                    type="submit"
+                    variant="gold"
+                    size="lg"
+                    fullWidth
+                    loading={login.isPending}
+                    style={{ marginTop: "4px" }}
+                >
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                  Access Dashboard <ArrowRight size={14} />
+                </span>
+                </Button>
+              </form>
             </div>
 
-            <Button type="submit" variant="gold" size="lg" fullWidth loading={login.isPending}>
-              Sign in
-            </Button>
-          </form>
-        </GlassCard>
+            {/* Core App Pivot Anchor Layout */}
+            <p style={{ textAlign: "center", fontSize: "13px", color: "var(--muted-foreground)", marginTop: "24px" }}>
+              New to the platform?{" "}
+              <Link to="/register" style={{ color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
+                Create your studio →
+              </Link>
+            </p>
 
-        <p style={{ textAlign:"center", fontSize:13, color:"var(--muted-foreground)", marginTop:20 }}>
-          New here?{" "}
-          <Link to="/register" style={{ color:"var(--primary)", fontWeight:500, textDecoration:"none" }}>
-            Create your studio →
-          </Link>
-        </p>
+          </div>
+        </div>
+
+        {/* Standalone Display Mode Fixes */}
+        <style>{`
+        @media (min-width: 1024px) {
+          .lg-grid-split { grid-template-columns: 5fr 7fr !important; }
+          .logo-mobile { display: none !important; }
+        }
+        @media (max-width: 1023px) {
+          .hero-side { display: none !important; }
+        }
+        
+        /* Handles iOS/Android hardware status bars when running as an installed standalone PWA app */
+        @media (display-mode: standalone) {
+          .standalone-safe-bounds {
+            padding-top: env(safe-area-inset-top, 0px) !important;
+            padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+          }
+        }
+      `}</style>
       </div>
-    </div>
   );
 }
