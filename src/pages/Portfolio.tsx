@@ -5,7 +5,7 @@ import { Loader2, AlertCircle, Clock, Sparkles, Star } from "lucide-react";
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "")
     .replace(/\/api\/v1\/?$/, "")
     .replace(/\/$/, "");
-const PUBLIC_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/v1/public` : "/api/v1/public";
+const PUBLIC_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/public` : "/api/public";
 
 interface ServiceItem {
     id: string;
