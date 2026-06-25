@@ -1,8 +1,8 @@
 import axios, { type InternalAxiosRequestConfig, type AxiosError } from "axios";
 import { Capacitor } from "@capacitor/core";
 
-const PROD_API = "https://naildesk-api-stagin.up.railway.app/api/v1";
-const PROD_WS  = "https://naildesk-api-stagin.up.railway.app/ws";
+const PROD_API = "https://naildesk-api-prod.up.railway.app/api/v1";
+const PROD_WS  = "wss://naildesk-api-prod.up.railway.app/ws";
 
 export const isNative = Capacitor.isNativePlatform();
 
