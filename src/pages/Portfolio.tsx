@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, Clock, Sparkles, Star } from "lucide-react";
 
-const API_BASE = "https://naildesk-api-prod.up.railway.app";
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "")
+    .replace(/\/api\/v1\/?$/, "")
+    .replace(/\/$/, "");
+const PUBLIC_API_BASE = API_ORIGIN ? `${API_ORIGIN}/api/v1/public` : "/api/v1/public";
 
 interface ServiceItem {
     id: string;
@@ -123,7 +126,7 @@ function ReviewForm({ techId, onDone }: { techId: string; onDone: () => void }) 
         setError("");
         setState("submitting");
         try {
-            const res = await fetch(`${API_BASE}/api/public/reviews/${techId}`, {
+            const res = await fetch(`${PUBLIC_API_BASE}/reviews/${techId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientName: name.trim(), rating, comment: comment.trim() || undefined }),
@@ -204,15 +207,24 @@ export default function PortfolioPage() {
     function load() {
         if (!techId) { setState({ phase: "error", message: "Invalid portfolio link." }); return; }
         setState({ phase: "loading" });
-        fetch(`${API_BASE}/api/public/portfolio/${techId}`)
+        fetch(`${PUBLIC_API_BASE}/portfolio/${techId}`)
             .then(async (r) => {
                 if (r.status === 404) throw new Error("not_found");
+                if (r.status === 403) throw new Error("forbidden");
                 if (!r.ok) throw new Error("server_error");
                 return r.json() as Promise<Portfolio>;
             })
             .then((data) => setState({ phase: "ready", data }))
             .catch((e: Error) => {
-                setState({ phase: "error", message: e.message === "not_found" ? "This portfolio doesn't exist." : "Something went wrong. Please try again." });
+                setState({
+                    phase: "error",
+                    message:
+                        e.message === "not_found"
+                            ? "This portfolio doesn't exist."
+                            : e.message === "forbidden"
+                                ? "This portfolio is not publicly available yet."
+                                : "Something went wrong. Please try again.",
+                });
             });
     }
 
