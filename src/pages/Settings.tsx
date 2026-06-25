@@ -691,22 +691,38 @@ export function BankingPage() {
   const [loaded, setLoaded] = useState(false);
   const [form, setForm]     = useState({ bankName:"", accountHolder:"", accountNumber:"", branchCode:"", accountType:"Cheque" });
 
-  useQuery<Profile>({
+  const profileQ = useQuery<Profile>({
     queryKey: ["profile"],
-    queryFn: async () => {
-      const { data } = await api.get<Profile>("/tech/profile");
-      if (!loaded) {
-        setForm({ bankName:data.bankName??"", accountHolder:data.accountHolder??"", accountNumber:data.accountNumber??"", branchCode:data.branchCode??"", accountType:data.accountType??"Cheque" });
-        setLoaded(true);
-      }
-      return data;
-    },
+    queryFn: async () => (await api.get<Profile>("/tech/profile")).data,
     staleTime: 60_000,
   });
 
+  useEffect(() => {
+    const data = profileQ.data;
+    if (!data || loaded) return;
+    setForm({
+      bankName: data.bankName ?? "",
+      accountHolder: data.accountHolder ?? "",
+      accountNumber: data.accountNumber ?? "",
+      branchCode: data.branchCode ?? "",
+      accountType: data.accountType ?? "Cheque",
+    });
+    setLoaded(true);
+  }, [profileQ.data, loaded]);
+
   const updateMut = useMutation({
     mutationFn: async () => (await api.put("/tech/profile", form)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey:["profile"] }); toast.success("Banking details saved"); nav(-1); },
+    onSuccess: (data) => {
+      qc.setQueryData<Profile>(["profile"], (old) => ({
+        ...(old ?? data),
+        ...data,
+        ...form,
+        hasBankingDetails: true,
+      }));
+      qc.invalidateQueries({ queryKey:["profile"] });
+      toast.success("Banking details saved");
+      nav(-1);
+    },
     onError: () => toast.error("Could not save"),
   });
 
