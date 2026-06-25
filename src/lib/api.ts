@@ -1,18 +1,13 @@
 import axios, { type InternalAxiosRequestConfig, type AxiosError } from "axios";
 import { Capacitor } from "@capacitor/core";
 
-// Production API endpoints (staging and production only)
-const STAGING_API = "https://naildesk-api-stagin.up.railway.app/api/v1";
-const STAGING_WS  = "https://naildesk-api-stagin.up.railway.app/ws";
-const PROD_API = "https://naildesk-api-prod.up.railway.app/api/v1";
-const PROD_WS  = "https://naildesk-api-prod.up.railway.app/ws";
+const PROD_API = "https://naildesk-api-stagin.up.railway.app/api/v1";
+const PROD_WS  = "https://naildesk-api-stagin.up.railway.app/ws";
 
 export const isNative = Capacitor.isNativePlatform();
 
-// Use environment variables for mode, default to staging
-const isProduction = (import.meta.env.MODE === "production");
-export const API_BASE = isProduction ? PROD_API : STAGING_API;
-export const WS_URL   = isProduction ? PROD_WS : STAGING_WS;
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? (isNative ? PROD_API : "/api/v1")) as string;
+export const WS_URL   = (import.meta.env.VITE_WS_URL ?? PROD_WS) as string;
 
 export const api = axios.create({
   baseURL: API_BASE,

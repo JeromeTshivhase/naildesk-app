@@ -11,6 +11,7 @@ import PaymentPage          from "./pages/PaymentPage";
 import PaymentSuccessPage   from "./pages/PaymentSuccess";
 import PaymentFailedPage    from "./pages/PaymentFailed";
 import PaymentCancelledPage from "./pages/PaymentCancelled";
+import PortfolioPage        from "./pages/Portfolio";
 import LoginPage    from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import HomePage     from "./pages/Home";
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="/payment-success"    element={<PaymentSuccessPage />} />
           <Route path="/payment-failed"     element={<PaymentFailedPage />} />
           <Route path="/payment-cancelled"  element={<PaymentCancelledPage />} />
+          <Route path="/portfolio/:techId"  element={<PortfolioPage />} />
 
           {/* Public auth routes */}
           <Route element={<RedirectIfAuth />}>

@@ -4,10 +4,10 @@ import { useNavigate } from "react-router-dom";
 import {
   ChevronRight, User, Building2, CalendarClock, Crown,
   AlertTriangle, LogOut, Plus, X, Zap, Bell, Sun, Moon, Monitor,
-  Pencil, Calendar, RefreshCw, Camera, ImageIcon,
+  Pencil, Calendar, RefreshCw, Camera, ImageIcon, Star, EyeOff, Eye,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api, type Profile, type Service, type Subscription, type AvailabilityWindow, uploadImage } from "../lib/api";
+import { api, type Profile, type Service, type Subscription, type AvailabilityWindow, type PortfolioImage, uploadImage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useTheme, type ThemeMode } from "../lib/theme";
 import { useNotifications } from "../stores/notifications";
@@ -114,6 +114,12 @@ export function SettingsPage() {
           {/* Services widget */}
           <p className="label-mono" style={{ marginBottom:8 }}>Your menu</p>
           <ServicesWidget />
+
+          <p className="label-mono" style={{ marginTop:20, marginBottom:8 }}>Portfolio</p>
+          <PortfolioWidget />
+
+          <p className="label-mono" style={{ marginTop:20, marginBottom:8 }}>Reviews</p>
+          <ReviewsWidget />
 
           {/* Notifications section */}
           <p className="label-mono" style={{ marginTop:20, marginBottom:8 }}>Notifications</p>
@@ -235,6 +241,242 @@ export function SettingsPage() {
           </GlassCard>
         </div>
       </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reviews widget
+// ─────────────────────────────────────────────────────────────────────────────
+interface TechReview {
+  id: string;
+  clientName: string;
+  rating: number;
+  comment?: string;
+  hidden: boolean;
+  createdAt: string;
+}
+
+function ReviewsWidget() {
+  const qc = useQueryClient();
+
+  const { data: reviews, isLoading } = useQuery<TechReview[]>({
+    queryKey: ["tech-reviews"],
+    queryFn: async () => (await api.get("/tech/reviews")).data,
+    staleTime: 60_000,
+  });
+
+  const hideMut = useMutation({
+    mutationFn: async (id: string) => api.patch(`/tech/reviews/${id}/hide`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tech-reviews"] }); toast.success("Visibility updated"); },
+    onError: () => toast.error("Could not update review"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => api.delete(`/tech/reviews/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tech-reviews"] }); toast.success("Review removed"); },
+    onError: () => toast.error("Could not remove review"),
+  });
+
+  return (
+      <GlassCard style={{ overflow: "hidden", padding: 0 }}>
+        {isLoading ? (
+            <Skeleton style={{ height: 80, margin: 16 }} />
+        ) : !reviews || reviews.length === 0 ? (
+            <div style={{ padding: "20px 16px", textAlign: "center" }}>
+              <p className="serif" style={{ fontSize: 16, fontStyle: "italic", color: "var(--muted-foreground)" }}>
+                No reviews yet
+              </p>
+              <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 4, fontWeight: 300 }}>
+                Clients can leave reviews from your portfolio page.
+              </p>
+            </div>
+        ) : (
+            reviews.map((r, i) => (
+                <div key={r.id} style={{
+                  padding: "12px 16px",
+                  borderBottom: i < reviews.length - 1 ? "1px solid var(--border)" : "none",
+                  opacity: r.hidden ? 0.5 : 1,
+                  transition: "opacity .15s",
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600 }}>{r.clientName}</p>
+                        <div style={{ display: "flex", gap: 1 }}>
+                          {[1,2,3,4,5].map((s) => (
+                              <Star key={s} size={11}
+                                    fill={r.rating >= s ? "#f59e0b" : "none"}
+                                    color={r.rating >= s ? "#f59e0b" : "#d1d5db"} />
+                          ))}
+                        </div>
+                        {r.hidden && (
+                            <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 99, background: "var(--muted)", color: "var(--muted-foreground)", fontWeight: 600, fontFamily: "monospace" }}>
+                      HIDDEN
+                    </span>
+                        )}
+                      </div>
+                      {r.comment && (
+                          <p style={{ fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.5, fontWeight: 300 }}>
+                            {r.comment}
+                          </p>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button
+                          onClick={() => hideMut.mutate(r.id)}
+                          aria-label={r.hidden ? "Show" : "Hide"}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", display: "flex", padding: 4 }}>
+                        {r.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                      <button
+                          onClick={() => { if (confirm("Remove this review?")) deleteMut.mutate(r.id); }}
+                          aria-label="Delete"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", display: "flex", padding: 4 }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+            ))
+        )}
+      </GlassCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Portfolio widget
+// ─────────────────────────────────────────────────────────────────────────────
+function PortfolioWidget() {
+  const qc       = useQueryClient();
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [caption, setCaption]     = useState("");
+  const [showForm, setShowForm]   = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  const { data: images, isLoading } = useQuery<PortfolioImage[]>({
+    queryKey: ["portfolio"],
+    queryFn: async () => (await api.get("/tech/portfolio")).data,
+    staleTime: 60_000,
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: async (imageUrl: string) =>
+        (await api.post("/tech/portfolio", { imageUrl, caption: caption.trim() || undefined })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+      setShowForm(false);
+      setCaption("");
+      setPreviewUrl("");
+      toast.success("Photo added to portfolio");
+    },
+    onError: () => toast.error("Could not add photo"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => api.delete(`/tech/portfolio/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); toast.success("Removed"); },
+    onError: () => toast.error("Could not remove"),
+  });
+
+  async function handlePickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { secureUrl } = await uploadImage(file);
+      setPreviewUrl(secureUrl);
+      toast.success("Photo ready — add a caption and save");
+    } catch {
+      toast.error("Photo upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+      <>
+        <GlassCard style={{ overflow: "hidden", padding: 0 }}>
+          {isLoading ? (
+              <Skeleton style={{ height: 80, margin: 16 }} />
+          ) : (images ?? []).length === 0 ? (
+              <div style={{ padding: "20px 16px", textAlign: "center" }}>
+                <p className="serif" style={{ fontSize: 16, fontStyle: "italic", color: "var(--muted-foreground)" }}>
+                  No portfolio photos yet
+                </p>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 4, fontWeight: 300 }}>
+                  Add nail designs to show clients before they book.
+                </p>
+              </div>
+          ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2, padding: 2 }}>
+                {(images ?? []).map((img) => (
+                    <div key={img.id} style={{ position: "relative", aspectRatio: "1", overflow: "hidden", borderRadius: 8 }}>
+                      <img
+                          src={img.imageUrl}
+                          alt={img.caption || "Portfolio"}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      />
+                      <button
+                          onClick={() => { if (confirm("Remove this photo?")) deleteMut.mutate(img.id); }}
+                          aria-label="Remove photo"
+                          style={{
+                            position: "absolute", top: 4, right: 4,
+                            background: "rgba(0,0,0,0.55)", border: "none", borderRadius: "50%",
+                            width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center",
+                            cursor: "pointer", color: "white",
+                          }}>
+                        <X size={12} />
+                      </button>
+                      {img.caption && (
+                          <div style={{
+                            position: "absolute", bottom: 0, left: 0, right: 0,
+                            background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                            padding: "8px 6px 4px", fontSize: 10, color: "white", fontWeight: 500,
+                          }}>
+                            {img.caption}
+                          </div>
+                      )}
+                    </div>
+                ))}
+              </div>
+          )}
+          <div style={{ padding: "10px 16px" }}>
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handlePickImage} />
+            <button
+                onClick={() => { setShowForm(true); fileRef.current?.click(); }}
+                style={{ width: "100%", padding: "9px", border: "1px dashed var(--border)", borderRadius: "var(--radius)", background: "transparent", cursor: uploading ? "wait" : "pointer", fontSize: 13, color: "var(--primary)", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <Camera size={14} /> {uploading ? "Uploading…" : "Add photo"}
+            </button>
+          </div>
+        </GlassCard>
+
+        {showForm && previewUrl && (
+            <GlassCard style={{ padding: 16, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+                <img src={previewUrl} alt="preview" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Caption (optional)</p>
+                  <input
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      placeholder="e.g. Acrylic set with chrome"
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, background: "var(--background)", color: "var(--foreground)", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button variant="gold" fullWidth loading={uploadMut.isPending} onClick={() => uploadMut.mutate(previewUrl)}>
+                  Save photo
+                </Button>
+                <Button variant="ghost" onClick={() => { setShowForm(false); setPreviewUrl(""); setCaption(""); }}>
+                  Cancel
+                </Button>
+              </div>
+            </GlassCard>
+        )}
+      </>
   );
 }
 
