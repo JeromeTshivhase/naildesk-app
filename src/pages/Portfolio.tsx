@@ -128,7 +128,8 @@ function ReviewForm({ techId, onDone }: { techId: string; onDone: () => void }) 
         try {
             const res = await fetch(`${PUBLIC_API_BASE}/reviews/${techId}`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                credentials: "omit",
+                headers: { "Content-Type": "application/json", Accept: "*/*" },
                 body: JSON.stringify({ clientName: name.trim(), rating, comment: comment.trim() || undefined }),
             });
             if (!res.ok) throw new Error();
@@ -207,7 +208,10 @@ export default function PortfolioPage() {
     function load() {
         if (!techId) { setState({ phase: "error", message: "Invalid portfolio link." }); return; }
         setState({ phase: "loading" });
-        fetch(`${PUBLIC_API_BASE}/portfolio/${techId}`)
+        fetch(`${PUBLIC_API_BASE}/portfolio/${techId}`, {
+            credentials: "omit",
+            headers: { Accept: "*/*" },
+        })
             .then(async (r) => {
                 if (r.status === 404) throw new Error("not_found");
                 if (r.status === 403) throw new Error("forbidden");

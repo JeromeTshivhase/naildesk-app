@@ -101,6 +101,15 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
+        const path = window.location.pathname;
+        const isPublicClientPage =
+            path.startsWith("/portfolio/") ||
+            path.startsWith("/pay/") ||
+            path === "/payment-success" ||
+            path === "/payment-failed" ||
+            path === "/payment-cancelled";
+
+        if (isPublicClientPage) return;
         if (!cancelled) await hydrate();
       } catch (e) {
         if (!cancelled) console.error("[App] Error during hydration:", e);
