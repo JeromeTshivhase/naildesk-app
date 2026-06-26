@@ -1169,7 +1169,7 @@ export function SubscriptionPage() {
         return (order[a.id as keyof typeof order] ?? 99) - (order[b.id as keyof typeof order] ?? 99);
       });
     },
-    staleTime: Infinity,
+    staleTime: 5 * 60 * 1000, // 5 minutes — plans rarely change but should not cache forever
   });
 
   async function upgrade(tier: string) {
@@ -1181,7 +1181,7 @@ export function SubscriptionPage() {
       const paymentUrl = response.data?.paymentUrl;
 
       if (paymentUrl) {
-        toast.success("Opening PayFast payment Gateway...");
+        toast.success("Opening Paystack payment Gateway...");
         await openURL(paymentUrl).catch((e) => {
           console.error("[Settings] Failed to open payment URL:", e);
           toast.error("Could not open payment window.");

@@ -140,24 +140,32 @@ async function createNotificationChannels() {
 /**
  * Initialize local notifications as a fallback
  */
-async function initLocalNotificationsFallback(onMessage: PushCallback) {
+async function initLocalNotificationsFallback(onMessage: PushCallback, skipPermissionRequest = false) {
   if (_localNotificationsInitialized) return;
   _localNotificationsInitialized = true;
 
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
 
-    // Request permission
     let permGranted = false;
-    try {
-      const perm = await LocalNotifications.requestPermissions();
-      permGranted = perm.display === "granted";
-      if (!permGranted) {
-        console.info("[Push] Local notification permission not granted");
+    if (skipPermissionRequest) {
+      try {
+        const status = await LocalNotifications.checkPermissions();
+        permGranted = status.display === "granted";
+      } catch (e) {
+        console.warn("[Push] Failed to check local notification permissions:", e);
       }
-    } catch (e) {
-      console.warn("[Push] Failed to request local notification permissions:", e);
-      // Continue anyway - some platforms may not require explicit permission
+    } else {
+      try {
+        const perm = await LocalNotifications.requestPermissions();
+        permGranted = perm.display === "granted";
+        if (!permGranted) {
+          console.info("[Push] Local notification permission not granted");
+        }
+      } catch (e) {
+        console.warn("[Push] Failed to request local notification permissions:", e);
+        // Continue anyway - some platforms may not require explicit permission
+      }
     }
 
     // Listen for local notification delivered (shown to user)
@@ -378,41 +386,44 @@ export async function initPushNotifications(onMessage: PushCallback) {
     return;
   }
 
-  // NOTE: No _pushNotificationsInitialized guard here intentionally.
-  // Firebase can issue a new token after app updates or token rotation.
-  // Every authStatus→authenticated transition should re-register so the
-  // backend always has a fresh token.
-
-  // Ensure channels exist before ANY notification can arrive (FCM or local).
-  // Must run before requestPermissions and before initLocalNotificationsFallback
-  // so the first notification posted always has a valid channel on Android 8+.
   await createNotificationChannels().catch((e) => {
     console.warn("[Push] Failed to pre-create notification channels:", e);
   });
 
-  // Initialize local notifications as fallback for all platforms
-  await initLocalNotificationsFallback(onMessage).catch((e) => {
+
+  let pushPluginAvailable = true;
+  let permGranted = false;
+  let PushNotificationsModule: typeof import("@capacitor/push-notifications") | undefined;
+
+  try {
+    PushNotificationsModule = await import("@capacitor/push-notifications");
+    const perm = await PushNotificationsModule.PushNotifications.requestPermissions();
+    permGranted = perm?.receive === "granted";
+    if (!permGranted) {
+      console.info("[Push] Push notification permission not granted");
+    }
+  } catch (e) {
+    console.warn("[Push] Failed to request permissions via PushNotifications:", e);
+    pushPluginAvailable = false;
+  }
+
+
+  await initLocalNotificationsFallback(onMessage, pushPluginAvailable).catch((e) => {
     console.warn("[Push] Failed to initialize local notifications fallback:", e);
   });
 
+  if (!pushPluginAvailable) {
+    console.warn("[Push] Push notifications disabled, using local notifications only");
+    return;
+  }
+
+  if (!permGranted) {
+    console.info("[Push] Using local notifications only");
+    return;
+  }
+
   try {
-    const { PushNotifications } = await import("@capacitor/push-notifications");
-
-    // Request permission
-    let perm;
-    try {
-      perm = await PushNotifications.requestPermissions();
-    } catch (e) {
-      console.warn("[Push] Failed to request permissions:", e);
-      console.warn("[Push] Push notifications disabled, using local notifications only");
-      return;
-    }
-
-    if (perm?.receive !== "granted") {
-      console.info("[Push] Push notification permission not granted");
-      console.info("[Push] Using local notifications only");
-      return;
-    }
+    const { PushNotifications } = PushNotificationsModule!;
 
     // Register with FCM / APNs
     try {
@@ -508,9 +519,6 @@ export async function initPushNotifications(onMessage: PushCallback) {
       console.warn("[Push] Failed to add foreground notification listener:", e);
     }
 
-    // Notification tapped (app was backgrounded or killed).
-    // Android already showed the FCM notification — do NOT post another local one.
-    // Just update the in-app store and navigate to the relevant screen.
     try {
       await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         try {
@@ -542,9 +550,6 @@ export async function initPushNotifications(onMessage: PushCallback) {
   }
 }
 
-// ── URL opener ───────────────────────────────────────────────────────────────
-// On native, use the Capacitor Browser plugin so the in-app browser handles
-// the PayFast payment flow. On web, fall back to a plain window.open.
 export async function openURL(url: string): Promise<void> {
   if (isNative) {
     try {

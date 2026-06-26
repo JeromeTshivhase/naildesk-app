@@ -14,6 +14,8 @@ import PaymentCancelledPage from "./pages/PaymentCancelled";
 import PortfolioPage        from "./pages/Portfolio";
 import LoginPage    from "./pages/Login";
 import RegisterPage from "./pages/Register";
+import ForgotPasswordPage from "./pages/ForgotPassword";
+import ResetPasswordPage  from "./pages/ResetPassword";
 import HomePage     from "./pages/Home";
 import EarningsPage from "./pages/Earnings";
 
@@ -107,7 +109,9 @@ export default function App() {
             path.startsWith("/pay/") ||
             path === "/payment-success" ||
             path === "/payment-failed" ||
-            path === "/payment-cancelled";
+            path === "/payment-cancelled" ||
+            path === "/forgot" ||
+            path === "/reset-password";
 
         if (isPublicClientPage) return;
         if (!cancelled) await hydrate();
@@ -176,8 +180,10 @@ export default function App() {
 
           {/* Public auth routes */}
           <Route element={<RedirectIfAuth />}>
-            <Route path="/login"    element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/login"          element={<LoginPage />} />
+            <Route path="/register"       element={<RegisterPage />} />
+            <Route path="/forgot"         element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
           </Route>
 
           {/* Protected app routes */}
