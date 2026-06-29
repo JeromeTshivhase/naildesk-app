@@ -167,6 +167,16 @@ export function AppointmentDetailPage() {
     queryFn: async () => (await api.get(`/tech/appointments/${id}`)).data,
   });
 
+  // Some backend versions don't inline the client's address on the appointment
+  // payload (no `client.address` or `clientAddress`). Fall back to fetching
+  // the client record directly so the address still shows up.
+  const needsClientFallback = !!data && !data.client?.address && !data.clientAddress && !!data.clientId;
+  const { data: clientFallback } = useQuery<Client>({
+    queryKey: ["client", data?.clientId],
+    queryFn: async () => (await api.get(`/tech/clients/${data!.clientId}`)).data,
+    enabled: needsClientFallback,
+  });
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["appointments"] });
     qc.invalidateQueries({ queryKey: ["appointment", id] });
@@ -228,7 +238,7 @@ export function AppointmentDetailPage() {
 
   const name = data.client?.fullName ?? data.clientName ?? "Client";
   const phone = data.client?.phone ?? data.clientPhone;
-  const address = data.client?.address ?? data.clientAddress;
+  const address = data.client?.address ?? data.clientAddress ?? clientFallback?.address;
   const svc = data.service?.name ?? data.serviceName ?? "Service";
   const price = data.price ?? data.service?.price;
   const isTerminal = TERMINAL.has(data.status);
@@ -242,62 +252,45 @@ export function AppointmentDetailPage() {
 
         <div style={{ padding: "20px 20px 0", display: "flex", flexDirection: "column", gap: 10 }}>
 
-          {/* Summary: status, client, service, date/time */}
+          {/* Hero: status + date/time */}
           <GlassCard style={{ padding: 20 }} glow>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <StatusPill status={data.status} />
               {data.depositStatus === "PAID" && (
                   <span className="label-mono" style={{ background: "var(--status-sage-bg)", color: "var(--status-sage-fg)", borderRadius: 99, padding: "3px 10px" }}>Deposit paid</span>
               )}
             </div>
+            <p className="serif" style={{ fontSize: 26, fontWeight: 400, margin: 0 }}>{fmt.date(data.startTime)}</p>
+            <p className="label-mono" style={{ color: "var(--primary)", margin: "4px 0 0" }}>
+              {fmt.time(data.startTime)}{data.endTime ? ` – ${fmt.time(data.endTime)}` : ""}
+            </p>
+          </GlassCard>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-              <Avatar initials={fmt.initials(name)} size={48} />
+          {/* Client */}
+          <GlassCard style={{ padding: "16px 20px" }}>
+            <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 12 }}>Client</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Avatar initials={fmt.initials(name)} size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="serif" style={{ fontSize: 22, fontWeight: 500, margin: 0, lineHeight: 1.15 }}>{name}</p>
+                <p style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>{name}</p>
                 {phone && <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: "2px 0 0" }}>{phone}</p>}
               </div>
               {phone && (
                   <a href={`tel:${phone}`} aria-label={`Call ${name}`}
-                     style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "var(--primary)", flexShrink: 0 }}>
+                     style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "var(--primary)", flexShrink: 0 }}>
                     <Phone size={16} />
                   </a>
               )}
             </div>
 
-            <div style={{ height: 1, background: "var(--border)", margin: "0 0 14px" }} />
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: data.service?.durationMinutes ? 14 : 12 }}>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>{svc}</p>
-                {data.service?.durationMinutes && (
-                    <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "2px 0 0" }}>{data.service.durationMinutes} min</p>
-                )}
-              </div>
-              {price != null && (
-                  <span className="serif" style={{ fontSize: 20, fontWeight: 500, flexShrink: 0, marginLeft: 12 }}>{fmt.currency(Number(price))}</span>
-              )}
-            </div>
-
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-              <p style={{ fontSize: 14, color: "var(--foreground)", fontWeight: 500, margin: 0 }}>{fmt.date(data.startTime)}</p>
-              <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: 0 }}>
-                {fmt.time(data.startTime)}{data.endTime ? ` – ${fmt.time(data.endTime)}` : ""}
-              </p>
-            </div>
-          </GlassCard>
-
-          {/* Location */}
-          {address && (
-              <GlassCard style={{ padding: "16px 20px" }}>
-                <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Location</p>
+            {address && (
                 <a
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
                       display: "flex", alignItems: "flex-start", gap: 10,
-                      padding: "10px 12px", borderRadius: "var(--radius)",
+                      marginTop: 12, padding: "10px 12px", borderRadius: "var(--radius)",
                       background: "var(--muted)", border: "1px solid var(--border)",
                       textDecoration: "none", transition: "border-color .15s",
                     }}
@@ -308,23 +301,38 @@ export function AppointmentDetailPage() {
                   <p style={{ fontSize: 13, color: "var(--foreground)", margin: 0, lineHeight: 1.4, flex: 1, minWidth: 0 }}>{address}</p>
                   <ExternalLink size={13} style={{ color: "var(--muted-foreground)", flexShrink: 0, marginTop: 2 }} />
                 </a>
-              </GlassCard>
-          )}
+            )}
+          </GlassCard>
 
-          {/* Payment */}
-          {!!data.depositRequired && (
-              <GlassCard style={{ padding: "16px 20px" }}>
-                <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Payment</p>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Deposit required</span>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositRequired)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Paid</span>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositPaid ?? 0)}</span>
-                </div>
-              </GlassCard>
-          )}
+          {/* Service & payment */}
+          <GlassCard style={{ padding: "16px 20px" }}>
+            <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Service</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>{svc}</p>
+                {data.service?.durationMinutes && (
+                    <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: "2px 0 0" }}>{data.service.durationMinutes} min</p>
+                )}
+              </div>
+              {price != null && (
+                  <span className="serif" style={{ fontSize: 24, fontWeight: 500, flexShrink: 0, marginLeft: 12 }}>{fmt.currency(Number(price))}</span>
+              )}
+            </div>
+
+            {!!data.depositRequired && (
+                <>
+                  <div style={{ height: 1, background: "var(--border)", margin: "14px 0 12px" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Deposit required</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositRequired)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Paid</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositPaid ?? 0)}</span>
+                  </div>
+                </>
+            )}
+          </GlassCard>
 
           {data.notes && (
               <GlassCard style={{ padding: "16px 20px" }}>
