@@ -157,10 +157,10 @@ export default function RegisterPage() {
                 </p>
 
                 <form onSubmit={submitForm} noValidate style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                  <FieldWrap icon={<User size={14} />}     label="Full name *"     placeholder="Zandi Mahlangu"      type="text"     value={form.fullName}     onChange={(v) => set("fullName", v)} />
-                  <FieldWrap icon={<Building2 size={14} />} label="Business name"  placeholder="Nails by Zandi"      type="text"     value={form.businessName} onChange={(v) => set("businessName", v)} />
-                  <FieldWrap icon={<Phone size={14} />}    label="Phone number *"  placeholder="+27 82 123 4567"     type="tel"      value={form.phone}        onChange={(v) => set("phone", v)} />
-                  <FieldWrap icon={<Lock size={14} />}     label="Password *"      placeholder="Min. 8 characters"   type="password" value={form.password}     onChange={(v) => set("password", v)} />
+                  <FieldWrap icon={<User size={14} />}     label="Full name *"     placeholder="e.g., Jane Doe"       type="text"     value={form.fullName}     onChange={(v) => set("fullName", v)} />
+                  <FieldWrap icon={<Building2 size={14} />} label="Business name"  placeholder="e.g., Beauty Salon"   type="text"     value={form.businessName} onChange={(v) => set("businessName", v)} />
+                  <FieldWrap icon={<Phone size={14} />}    label="Phone number *"  placeholder="e.g., 082 123 4567"   type="tel"      value={form.phone}        onChange={(v) => set("phone", v)} />
+                  <FieldWrap icon={<Lock size={14} />}     label="Password *"      placeholder="••••••••"             type="password" value={form.password}     onChange={(v) => set("password", v)} />
 
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"var(--secondary)", border: "1px solid var(--border)", borderRadius:"var(--radius)", padding:"12px 14px", marginTop: 4 }}>
                     <div>
