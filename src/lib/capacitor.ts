@@ -55,13 +55,11 @@ export async function initAppListeners() {
 // ── Push notifications ────────────────────────────────────────────────────────
 type PushCallback = (payload: { type: string; message: string; appointmentId?: string; clientName?: string }) => void;
 
-// Track if we've attempted push notifications initialization
-// NOTE: intentionally NOT guarding re-init so FCM token refresh always reaches backend
-let _localNotificationsInitialized = false;
-
 // Tracks notification types recently delivered by FCM (foreground) so the
 // STOMP handler can skip posting a duplicate local notification.
 const _recentFcmDeliveries = new Set<string>();
+const PUSH_TOKEN_KEY = "naildesk.pushToken";
+const PUSH_STATUS_KEY = "naildesk.pushStatus";
 
 /** Returns true if FCM already handled a notification of this type within the last 3 seconds. */
 export function wasFcmRecentlyDelivered(type: string): boolean {
@@ -90,6 +88,64 @@ function isStoredJwtExpired(): boolean {
     console.warn("[Push] Could not decode JWT expiry:", e);
     return false; // let the interceptor handle it
   }
+}
+
+function recordPushStatus(status: string, detail?: unknown) {
+  try {
+    localStorage.setItem(PUSH_STATUS_KEY, JSON.stringify({
+      status,
+      detail: typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : undefined,
+      at: new Date().toISOString(),
+      platform,
+    }));
+  } catch {}
+}
+
+async function subscribeNativePushToken(token: string) {
+  try {
+    if (!token) {
+      recordPushStatus("missing-token");
+      return false;
+    }
+
+    const { api } = await import("./api");
+
+    if (isStoredJwtExpired()) {
+      console.warn("[Push] Stored JWT appears expired - interceptor will attempt refresh before subscribe POST");
+      recordPushStatus("jwt-expired-before-subscribe");
+    }
+
+    await api.post("/push/subscribe", {
+      endpoint: token,
+      p256dh: "",
+      auth: "",
+      platform,
+    });
+
+    console.info("[Push] Successfully registered FCM token with backend");
+    recordPushStatus("subscribed");
+    return true;
+  } catch (e: any) {
+    const detail = {
+      status: e?.response?.status,
+      data: e?.response?.data,
+      message: e?.message,
+    };
+    console.warn("[Push] Failed to subscribe token on backend:", detail.status, detail.data ?? detail.message);
+    recordPushStatus("subscribe-failed", detail);
+    return false;
+  }
+}
+
+async function retryStoredNativePushToken() {
+  try {
+    const token = localStorage.getItem(PUSH_TOKEN_KEY);
+    if (!token) {
+      recordPushStatus("no-stored-token");
+      return;
+    }
+    await subscribeNativePushToken(token);
+  } catch {}
 }
 
 /**
@@ -138,11 +194,11 @@ async function createNotificationChannels() {
 }
 
 /**
- * Initialize local notifications as a fallback
+ * Initialize local notifications as a fallback.
+ * Safe to call multiple times — listeners are always re-registered so that
+ * re-auth flows bind the current onMessage callback (avoids stale closures).
  */
 async function initLocalNotificationsFallback(onMessage: PushCallback, skipPermissionRequest = false) {
-  if (_localNotificationsInitialized) return;
-  _localNotificationsInitialized = true;
 
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
@@ -258,9 +314,11 @@ export async function showLocalNotificationFallback(payload: { type: string; mes
 }
 
 /**
- * Initialize Web Push API for browsers
+ * Initialize Web Push API for browsers.
+ * Exported so it can be called directly after the user grants permission
+ * mid-session (e.g. from NotificationPrompt), not just at app startup.
  */
-async function initWebPush() {
+export async function initWebPush() {
   if (!("serviceWorker" in navigator)) return;
   if (!("PushManager" in window)) return;
 
@@ -274,10 +332,14 @@ async function initWebPush() {
 
     const registration = await navigator.serviceWorker.ready;
 
-    // Forward SW NAVIGATE messages (from notification clicks) into the app router
+    // Forward SW NAVIGATE messages (from notification clicks) into the app router.
+    // The SW sends a path like "/appointments/apt-123" — push it into the
+    // history API so BrowserRouter picks it up without a full page reload.
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "NAVIGATE" && event.data.url) {
-        window.location.hash = event.data.url;
+        window.history.pushState(null, "", event.data.url);
+        // Dispatch a popstate event so React Router re-evaluates the location.
+        window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
       }
     });
 
@@ -288,10 +350,25 @@ async function initWebPush() {
 
     if (Notification.permission !== "granted") return;
 
-    // Check for an existing subscription first
+    // Check for an existing subscription first.
+    // Even if one exists in the browser, the backend may have lost its record
+    // (redeploy, DB wipe, etc.) — always re-POST so the backend stays in sync.
     const existingSubscription = await registration.pushManager.getSubscription();
     if (existingSubscription) {
-      console.info("[Push] Web Push already subscribed");
+      console.info("[Push] Web Push already subscribed — re-syncing with backend");
+      try {
+        const { api } = await import("./api");
+        const json = existingSubscription.toJSON();
+        await api.post("/push/subscribe", {
+          endpoint: json.endpoint,
+          p256dh: json.keys?.p256dh ?? "",
+          auth: json.keys?.auth ?? "",
+          platform: "web",
+        });
+        console.info("[Push] Existing web push subscription re-synced with backend");
+      } catch (e) {
+        console.warn("[Push] Failed to re-sync existing web push subscription:", e);
+      }
       return;
     }
 
@@ -390,6 +467,10 @@ export async function initPushNotifications(onMessage: PushCallback) {
     console.warn("[Push] Failed to pre-create notification channels:", e);
   });
 
+  // NOTE: retryStoredNativePushToken is intentionally NOT called here.
+  // Calling it before listeners are attached creates a race: if FCM fires
+  // a fresh `registration` event synchronously during register(), the listener
+  // may not be attached yet. The retry now happens after register() succeeds.
 
   let pushPluginAvailable = true;
   let permGranted = false;
@@ -407,8 +488,10 @@ export async function initPushNotifications(onMessage: PushCallback) {
     pushPluginAvailable = false;
   }
 
-
-  await initLocalNotificationsFallback(onMessage, pushPluginAvailable).catch((e) => {
+  // When FCM is unavailable, local notifications are the sole delivery path —
+  // always request permission. When FCM IS available, only check existing
+  // permission (FCM's own requestPermissions already prompted the user above).
+  await initLocalNotificationsFallback(onMessage, /* skipPermissionRequest= */ pushPluginAvailable).catch((e) => {
     console.warn("[Push] Failed to initialize local notifications fallback:", e);
   });
 
@@ -425,46 +508,21 @@ export async function initPushNotifications(onMessage: PushCallback) {
   try {
     const { PushNotifications } = PushNotificationsModule!;
 
-    // Register with FCM / APNs
-    try {
-      await PushNotifications.register();
-      console.info(`[Push] FCM/APNs registration successful on ${platform}`);
-    } catch (e: any) {
-      const errMsg = e?.message || e?.toString() || "";
-      if (errMsg.includes("FirebaseApp") || errMsg.includes("not initialized")) {
-        console.warn(`[Push] Firebase not initialized on ${platform}`);
-        console.info(`[Push] To enable Firebase: Place google-services.json in android/app/ and rebuild`);
-        return;
-      }
-      console.warn(`[Push] Failed to register on ${platform}:`, e);
-      return;
-    }
+    // ── Attach ALL listeners BEFORE calling register() ────────────────────────
+    // register() triggers the `registration` event immediately — if the listener
+    // is added after, the token fires into the void and the backend never gets it.
 
     // Token received → send to backend
     try {
       await PushNotifications.addListener("registration", async (token) => {
         try {
-          const { api } = await import("./api");
           console.info(`[Push] Received FCM/APNs token: ${token.value.substring(0, 20)}...`);
-
-          // Warn if the stored JWT looks expired — the request interceptor will
-          // attempt a token refresh automatically, but this log helps debugging.
-          if (isStoredJwtExpired()) {
-            console.warn("[Push] Stored JWT appears expired — interceptor will attempt refresh before subscribe POST");
-          }
-
-          await api.post("/push/subscribe", {
-            endpoint: token.value,
-            p256dh: "",
-            auth: "",
-            platform: platform,
-          }).then(() => {
-            console.info("[Push] Successfully registered FCM token with backend");
-          }).catch((e) => {
-            console.warn("[Push] Failed to subscribe token on backend:", e?.response?.status, e?.response?.data ?? e?.message);
-          });
+          localStorage.setItem(PUSH_TOKEN_KEY, token.value);
+          recordPushStatus("token-received");
+          await subscribeNativePushToken(token.value);
         } catch (e) {
           console.warn("[Push] Error in registration listener:", e);
+          recordPushStatus("registration-listener-error", (e as any)?.message ?? String(e));
         }
       });
     } catch (e) {
@@ -493,8 +551,6 @@ export async function initPushNotifications(onMessage: PushCallback) {
           const data = notification.data ?? {};
           const payload = {
             type: data.type ?? "APPOINTMENT_BOOKED",
-            // Prefer the structured data.message from the FCM data payload.
-            // Fall back to notification.body only if data.message is absent.
             message: data.message ?? notification.body ?? notification.title ?? "New notification",
             appointmentId: data.appointmentId,
             clientName: data.clientName,
@@ -503,13 +559,9 @@ export async function initPushNotifications(onMessage: PushCallback) {
           console.info("[Push] Foreground FCM/APNs notification received:", payload.type);
           onMessage(payload);
 
-          // Mark this type as recently handled by FCM so the STOMP handler
-          // doesn't post a duplicate local notification.
           _recentFcmDeliveries.add(payload.type);
           setTimeout(() => _recentFcmDeliveries.delete(payload.type), 3000);
 
-          // Show as local notification so the user sees it while the app is open.
-          // (FCM notifications are suppressed by Android when the app is in the foreground.)
           showLocalNotificationFallback(payload).catch(() => {});
         } catch (e) {
           console.warn("[Push] Error handling foreground notification:", e);
@@ -533,7 +585,6 @@ export async function initPushNotifications(onMessage: PushCallback) {
           console.info("[Push] FCM/APNs notification action performed:", payload.type);
           onMessage(payload);
 
-          // Navigate to appointment detail if we have an id
           if (data.appointmentId) {
             window.location.hash = `/appointments/${data.appointmentId}`;
           }
@@ -543,6 +594,29 @@ export async function initPushNotifications(onMessage: PushCallback) {
       });
     } catch (e) {
       console.warn("[Push] Failed to add notification action listener:", e);
+    }
+
+    // ── Register with FCM / APNs AFTER listeners are attached ─────────────────
+    try {
+      await PushNotifications.register();
+      console.info(`[Push] FCM/APNs registration successful on ${platform}`);
+      recordPushStatus("native-register-called");
+      // Retry any previously cached token now that listeners are live.
+      // Also schedule a second retry in case the fresh registration event
+      // fires slightly after this point and overwrites the stored token.
+      retryStoredNativePushToken().catch(() => {});
+      setTimeout(() => retryStoredNativePushToken().catch(() => {}), 3000);
+    } catch (e: any) {
+      const errMsg = e?.message || e?.toString() || "";
+      if (errMsg.includes("FirebaseApp") || errMsg.includes("not initialized")) {
+        console.warn(`[Push] Firebase not initialized on ${platform}`);
+        console.info(`[Push] To enable Firebase: Place google-services.json in android/app/ and rebuild`);
+        recordPushStatus("firebase-not-initialized", errMsg);
+        return;
+      }
+      console.warn(`[Push] Failed to register on ${platform}:`, e);
+      recordPushStatus("native-register-failed", errMsg);
+      return;
     }
   } catch (e) {
     console.warn("[Push] Push notifications not available:", e);

@@ -29,28 +29,18 @@ export function useWebSocket() {
       isConnectingRef.current = true;
 
       try {
-        const SockJS = (await import("sockjs-client")).default;
+        // Use native WebSocket directly — SockJS depends on Node.js `global`
+        // which doesn't exist in browsers and causes "global is not defined".
+        // Spring Boot's STOMP endpoint now supports plain WebSocket at /ws.
+        const wsUrl = WS_URL.replace(/^http/, "ws"); // ensure ws:// or wss://
 
         const client = new Client({
-          webSocketFactory: () => {
-            try {
-              return new SockJS(WS_URL, null, { transports: ["websocket", "xhr-streaming", "xhr-polling"] }) as unknown as WebSocket;
-            } catch (e) {
-              if ((import.meta as any).env?.DEV) console.error("[STOMP] WebSocket factory error:", e);
-              throw e;
-            }
-          },
+          brokerURL: wsUrl,
 
-          // Send the JWT in the STOMP CONNECT frame so the server can authenticate
-          // it at the messaging layer — this works across all SockJS transports
-          // (including xhr-streaming/polling on native) where HTTP-level custom
-          // headers are not forwarded.
           connectHeaders: {
             Authorization: `Bearer ${loadToken() ?? ""}`,
           },
 
-          // Refresh the token header before every (re)connect attempt so a
-          // silently-refreshed token is always used rather than the original one.
           beforeConnect: async () => {
             const fresh = loadToken();
             client.connectHeaders = {
@@ -64,7 +54,7 @@ export function useWebSocket() {
           debug: (import.meta as any).env?.DEV ? (msg: string) => console.debug("[STOMP]", msg) : () => {},
 
           onConnect: () => {
-            attemptCount = 0; // Reset on successful connection
+            attemptCount = 0;
             if (cancelled) return;
 
             try {
@@ -79,11 +69,7 @@ export function useWebSocket() {
                     clientName: data.clientName,
                   };
                   addNotif(payload);
-                  // Show a toast for in-app feedback
                   toast.info(data.message || "New notification", { duration: 4000 });
-                  // On Android, post a native notification — but only if FCM hasn't
-                  // already handled it in the last 3 seconds (avoids duplicates when
-                  // both FCM and STOMP fire while the app is in the foreground).
                   if (isNative && !wasFcmRecentlyDelivered(payload.type)) {
                     showLocalNotificationFallback(payload).catch(() => {});
                   }
@@ -115,13 +101,10 @@ export function useWebSocket() {
         }
 
         clientRef.current = client;
-
-        // Activate the client (errors are handled via onStompError and onWebSocketError handlers)
         client.activate();
       } catch (e) {
         if ((import.meta as any).env?.DEV) console.error("[STOMP] failed to init:", e);
-        // Don't crash the app on WebSocket setup failure
-        if (isNative && attemptCount < maxRetries && !cancelled) {
+        if (attemptCount < maxRetries && !cancelled) {
           attemptCount++;
           const delay = Math.min(1000 * Math.pow(2, attemptCount), 10000);
           reconnectTimeoutRef.current = setTimeout(connect, delay);
@@ -131,13 +114,7 @@ export function useWebSocket() {
       }
     }
 
-    try {
-      connect().catch((e) => {
-        console.error("[STOMP] Connect error:", e);
-      });
-    } catch (e) {
-      console.error("[STOMP] Unexpected error in connect:", e);
-    }
+    connect().catch((e) => console.error("[STOMP] Connect error:", e));
 
     return () => {
       cancelled = true;

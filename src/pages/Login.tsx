@@ -101,13 +101,13 @@ export default function LoginPage() {
               The workspace for elite <span style={{ color: "var(--primary)", fontStyle: "italic" }}>nail professionals.</span>
             </h2>
             <p style={{ fontSize: "13px", color: "var(--muted-foreground)", lineHeight: "1.6", fontWeight: 300 }}>
-              Automate deposit management, client validation parameters, and portfolio generation in one interface.
+              Manage bookings, deposits, and your client portfolio — all from one place.
             </p>
           </div>
 
           <div className="label-mono" style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", gap: "8px", color: "var(--muted-foreground)" }}>
             <ShieldCheck size={14} style={{ color: "var(--primary)" }} />
-            Secured by NailDesk Ledger Core
+            Protected by NailDesk
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export default function LoginPage() {
                 Welcome back
               </h1>
               <p style={{ fontSize: "13px", color: "var(--muted-foreground)", fontWeight: 300 }}>
-                Enter your credentials to open your administrative workspace.
+                Sign in to your NailDesk account.
               </p>
             </div>
 
@@ -140,7 +140,7 @@ export default function LoginPage() {
                 {/* Phone Entry Component */}
                 <div>
                   <label className="label-mono" style={{ display: "block", marginBottom: "6px", color: "var(--muted-foreground)" }}>
-                    Phone Connection Vector
+                    Phone number
                   </label>
                   <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                   <span style={{ position: "absolute", left: "14px", color: "var(--muted-foreground)", display: "flex", alignItems: "center" }}>
@@ -164,7 +164,7 @@ export default function LoginPage() {
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
                     <label className="label-mono" style={{ color: "var(--muted-foreground)" }}>
-                      Security Passkey
+                      Password
                     </label>
                     <Link to="/forgot" style={{ fontSize: "11px", color: "var(--primary)", fontWeight: 500, textDecoration: "none" }} className="label-mono">
                       Forgot?
@@ -212,7 +212,7 @@ export default function LoginPage() {
                     style={{ marginTop: "4px" }}
                 >
                 <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                  Access Dashboard <ArrowRight size={14} />
+                  Sign in <ArrowRight size={14} />
                 </span>
                 </Button>
               </form>

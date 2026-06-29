@@ -33,6 +33,7 @@ import {
 
 import {
   SettingsPage,
+  BusinessPage,
   ProfileEditPage,
   BankingPage,
   AvailabilityPage,
@@ -205,6 +206,7 @@ export default function App() {
 
             {/* Settings */}
             <Route path="/settings"              element={<SettingsPage />} />
+            <Route path="/settings/business"     element={<BusinessPage />} />
             <Route path="/settings/profile"      element={<ProfileEditPage />} />
             <Route path="/settings/banking"      element={<BankingPage />} />
             <Route path="/settings/availability" element={<AvailabilityPage />} />

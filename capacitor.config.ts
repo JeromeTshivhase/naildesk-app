@@ -8,7 +8,12 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: "https",
     hostname: "naildesk.app",
-    allowNavigation: ["naildesk-api-prod.up.railway.app", "*.up.railway.app"],
+    // Allow navigation to API and WebSocket endpoints
+    allowNavigation: [
+      "naildesk-api-prod.up.railway.app",
+      "*.up.railway.app",
+      "wss://naildesk-api-prod.up.railway.app",
+    ],
     cleartext: false,
     errorHandler: "native",
   },
@@ -40,7 +45,9 @@ const config: CapacitorConfig = {
   },
 
   android: {
-    allowMixedContent: false,
+    // allowMixedContent must be true so the Android WebView permits
+    // wss:// WebSocket connections alongside https:// content.
+    allowMixedContent: true,
     captureInput: true,
     webContentsDebuggingEnabled: false,
     loggingBehavior: "none",

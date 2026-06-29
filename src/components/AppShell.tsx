@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { BottomNav } from "./BottomNav";
 import { SubscriptionBanner } from "./SubscriptionBanner";
+import { NotificationBell } from "./NotificationBell";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -34,13 +35,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="bg-app relative">
-      {/* Subscription banner with error boundary */}
-      <div>
-        <SubscriptionBanner />
-      </div>
+      <SubscriptionBanner />
+      <NotificationBell />
       <main
         className="mx-auto animate-fade-up"
-        style={{ maxWidth:480, paddingBottom:112 }}
+        style={{ maxWidth:480, paddingBottom:"calc(100px + env(safe-area-inset-bottom, 16px))" }}
       >
         {children}
       </main>

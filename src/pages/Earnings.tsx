@@ -97,7 +97,7 @@ export default function EarningsPage() {
         <div
             className="animate-fade-in standalone-safe-bounds"
             style={{
-                paddingBottom: "calc(32px + env(safe-area-inset-bottom, 0px))",
+                paddingBottom: "calc(100px + env(safe-area-inset-bottom, 16px))",
                 userSelect: "none",
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none"

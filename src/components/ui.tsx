@@ -40,7 +40,7 @@ export function StatusPill({ status, className }: { status: AppointmentStatus; c
   return (
     <span
       className={cn("label-mono inline-flex items-center gap-1.5 rounded-full px-2.5 py-1", className)}
-      style={{ background: c.bg, color: c.fg }}
+      style={{ background: c.bg, color: c.fg, fontSize: 9 }}
     >
       <span style={{ width:6, height:6, borderRadius:"50%", background:c.fg, flexShrink:0, display:"inline-block" }} />
       {c.label}
@@ -132,8 +132,8 @@ export function SectionTitle({ eyebrow, title, action }: { eyebrow:string; title
   return (
     <div className="flex items-end justify-between mb-3">
       <div>
-        <p className="label-mono text-primary mb-0.5">{eyebrow}</p>
-        <h2 className="serif" style={{ fontSize:26, fontWeight:400, color:"var(--foreground)" }}>{title}</h2>
+        <p className="label-mono text-primary mb-0.5" style={{ fontSize: 10 }}>{eyebrow}</p>
+        <h2 className="serif" style={{ fontSize:26, fontWeight:400, color:"var(--foreground)", lineHeight: 1 }}>{title}</h2>
       </div>
       {action}
     </div>

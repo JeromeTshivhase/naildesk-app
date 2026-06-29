@@ -117,6 +117,7 @@ export interface Appointment {
   clientId?: string;
   clientName?: string;
   clientPhone?: string;
+  clientAddress?: string;
   serviceId?: string;
   serviceName?: string;
   depositRequired?: number;
@@ -126,7 +127,7 @@ export interface Appointment {
   confirmedAt?: string;
   cancelledAt?: string;
   createdAt?: string;
-  client?: { id: string; fullName: string; phone?: string };
+  client?: { id: string; fullName: string; phone?: string; address?: string };
   service?: { id: string; name: string; durationMinutes: number; price: number };
   price?: number;
 }

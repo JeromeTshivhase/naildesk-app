@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Plus, Phone, CheckCircle2, XCircle, CalendarX, RotateCcw, Link2, RefreshCw } from "lucide-react";
+import { Plus, Phone, CheckCircle2, XCircle, CalendarX, RotateCcw, Link2, RefreshCw, MapPin, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import {
   api, type Appointment, type AppointmentStatus,
@@ -42,8 +42,7 @@ export function AppointmentsPage() {
 
   return (
       <div>
-        <div style={{ position: "relative", padding: "48px 20px 12px", overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 60% 50% at 50% 0%, oklch(0.72 0.12 55 / 0.09) 0%, transparent 100%)" }} />
+        <div className="page-glow" style={{ position: "relative", padding: "48px 20px 12px", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
             <div>
               <p className="label-mono" style={{ color: "var(--primary)", marginBottom: 4 }}>Schedule</p>
@@ -61,8 +60,10 @@ export function AppointmentsPage() {
             {Array.from({ length: 14 }, (_, i) => {
               const d = dayOffset(i);
               const on = i === sel;
+              const isToday = i === 0;
               return (
                   <button key={i} onClick={() => setSel(i)} style={{
+                    position: "relative",
                     width: 48, display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                     padding: "8px 4px", borderRadius: "var(--radius)", border: "1px solid transparent",
                     cursor: "pointer", transition: "all .2s",
@@ -74,6 +75,12 @@ export function AppointmentsPage() {
                     <span className="serif" style={{ fontSize: 20, fontWeight: 400, color: on ? "oklch(0.10 0.01 50)" : "var(--foreground)" }}>
                   {d.getDate()}
                 </span>
+                    {isToday && (
+                        <span style={{
+                          position: "absolute", bottom: 4, width: 4, height: 4, borderRadius: "50%",
+                          background: on ? "oklch(0.10 0.01 50 / 0.6)" : "var(--primary)",
+                        }} />
+                    )}
                   </button>
               );
             })}
@@ -81,13 +88,23 @@ export function AppointmentsPage() {
         </div>
 
         <div style={{ padding: "0 20px" }}>
+          {!isLoading && !!data?.length && (
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+                <h2 className="serif" style={{ fontSize: 18, fontWeight: 400, margin: 0, color: "var(--foreground)" }}>
+                  {sel === 0 ? "Today" : fmt.date(date, { weekday: "long", day: "numeric", month: "long" })}
+                </h2>
+                <span className="label-mono" style={{ color: "var(--muted-foreground)" }}>
+                {data.length} booking{data.length !== 1 ? "s" : ""} · {fmt.currency(data.reduce((sum, a) => sum + Number(a.price ?? a.service?.price ?? 0), 0))}
+              </span>
+              </div>
+          )}
           {isLoading
               ? [1, 2].map((i) => <Skeleton key={i} style={{ height: 90, marginBottom: 8 }} />)
               : !data?.length
                   ? <EmptyState title="No bookings this day" subtitle="Tap + to add one."
                                 action={<Button variant="gold" size="sm" onClick={() => nav("/appointments/new")}>New booking</Button>}
                   />
-                  : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 8 }} className="stagger-fade-up">
                     {data.map((a) => <ApptListCard key={a.id} appt={a} />)}
                   </div>
           }
@@ -101,17 +118,20 @@ function ApptListCard({ appt }: { appt: Appointment }) {
   const name = appt.client?.fullName ?? appt.clientName ?? "Client";
   const svc = appt.service?.name ?? appt.serviceName ?? "Service";
   const price = appt.price ?? appt.service?.price;
+  const end = appt.endTime
+      ? fmt.time(appt.endTime)
+      : appt.service?.durationMinutes
+          ? fmt.time(new Date(new Date(appt.startTime).getTime() + appt.service.durationMinutes * 60_000))
+          : "";
   return (
-      <GlassCard style={{ cursor: "pointer", overflow: "hidden", position: "relative", transition: "transform .15s" }}
+      <GlassCard className="appt-list-card" style={{ cursor: "pointer", overflow: "hidden", position: "relative" }}
                  onClick={() => nav(`/appointments/${appt.id}`)}
-                 onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                 onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
       >
         <span style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accentColor(appt.status) }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px 9px 18px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="serif" style={{ fontSize: 17, fontWeight: 500 }}>{fmt.time(appt.startTime)}</span>
-            {appt.endTime && <span className="label-mono" style={{ color: "var(--muted-foreground)" }}>→ {fmt.time(appt.endTime)}</span>}
+            {end && <span className="label-mono" style={{ color: "var(--muted-foreground)" }}>→ {end}</span>}
           </div>
           <StatusPill status={appt.status} />
         </div>
@@ -119,7 +139,7 @@ function ApptListCard({ appt }: { appt: Appointment }) {
           <Avatar initials={fmt.initials(name)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 500 }}>{name}</p>
-            <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 1 }}>{svc}</p>
+            <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{svc}</p>
           </div>
           {price != null && <span className="serif" style={{ fontSize: 17, fontWeight: 500, flexShrink: 0 }}>{fmt.currency(Number(price))}</span>}
         </div>
@@ -208,6 +228,7 @@ export function AppointmentDetailPage() {
 
   const name = data.client?.fullName ?? data.clientName ?? "Client";
   const phone = data.client?.phone ?? data.clientPhone;
+  const address = data.client?.address ?? data.clientAddress;
   const svc = data.service?.name ?? data.serviceName ?? "Service";
   const price = data.price ?? data.service?.price;
   const isTerminal = TERMINAL.has(data.status);
@@ -220,63 +241,90 @@ export function AppointmentDetailPage() {
         </div>
 
         <div style={{ padding: "20px 20px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+
+          {/* Summary: status, client, service, date/time */}
           <GlassCard style={{ padding: 20 }} glow>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
               <StatusPill status={data.status} />
               {data.depositStatus === "PAID" && (
                   <span className="label-mono" style={{ background: "var(--status-sage-bg)", color: "var(--status-sage-fg)", borderRadius: 99, padding: "3px 10px" }}>Deposit paid</span>
               )}
             </div>
-            <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 2 }}>Date &amp; time</p>
-            <p className="serif" style={{ fontSize: 28, fontWeight: 400 }}>{fmt.date(data.startTime)}</p>
-            <p style={{ fontSize: 16, color: "var(--muted-foreground)", marginTop: 2 }}>
-              {fmt.time(data.startTime)}{data.endTime ? ` – ${fmt.time(data.endTime)}` : ""}
-            </p>
-          </GlassCard>
 
-          <GlassCard style={{ padding: "16px 20px" }}>
-            <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Client</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <Avatar initials={fmt.initials(name)} size={44} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 16, fontWeight: 500 }}>{name}</p>
-                {phone && <p style={{ fontSize: 13, color: "var(--muted-foreground)" }}>{phone}</p>}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              <Avatar initials={fmt.initials(name)} size={48} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p className="serif" style={{ fontSize: 22, fontWeight: 500, margin: 0, lineHeight: 1.15 }}>{name}</p>
+                {phone && <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: "2px 0 0" }}>{phone}</p>}
               </div>
               {phone && (
                   <a href={`tel:${phone}`} aria-label={`Call ${name}`}
-                     style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "var(--primary)" }}>
+                     style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--secondary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "var(--primary)", flexShrink: 0 }}>
                     <Phone size={16} />
                   </a>
               )}
             </div>
-          </GlassCard>
 
-          <GlassCard style={{ padding: "16px 20px" }}>
-            <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 8 }}>Service</p>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <p style={{ fontSize: 16, fontWeight: 500 }}>{svc}</p>
+            <div style={{ height: 1, background: "var(--border)", margin: "0 0 14px" }} />
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: data.service?.durationMinutes ? 14 : 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>{svc}</p>
                 {data.service?.durationMinutes && (
-                    <p style={{ fontSize: 13, color: "var(--muted-foreground)" }}>{data.service.durationMinutes} min</p>
+                    <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "2px 0 0" }}>{data.service.durationMinutes} min</p>
                 )}
               </div>
               {price != null && (
-                  <span className="serif" style={{ fontSize: 24, fontWeight: 500 }}>{fmt.currency(Number(price))}</span>
+                  <span className="serif" style={{ fontSize: 20, fontWeight: 500, flexShrink: 0, marginLeft: 12 }}>{fmt.currency(Number(price))}</span>
               )}
             </div>
-            {!!data.depositRequired && (
-                <div style={{ marginTop: 12, padding: "8px 12px", background: "var(--secondary)", borderRadius: "var(--radius)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Deposit required</span>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{fmt.currency(data.depositRequired)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Paid</span>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{fmt.currency(data.depositPaid ?? 0)}</span>
-                  </div>
-                </div>
-            )}
+
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <p style={{ fontSize: 14, color: "var(--foreground)", fontWeight: 500, margin: 0 }}>{fmt.date(data.startTime)}</p>
+              <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: 0 }}>
+                {fmt.time(data.startTime)}{data.endTime ? ` – ${fmt.time(data.endTime)}` : ""}
+              </p>
+            </div>
           </GlassCard>
+
+          {/* Location */}
+          {address && (
+              <GlassCard style={{ padding: "16px 20px" }}>
+                <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Location</p>
+                <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "flex", alignItems: "flex-start", gap: 10,
+                      padding: "10px 12px", borderRadius: "var(--radius)",
+                      background: "var(--muted)", border: "1px solid var(--border)",
+                      textDecoration: "none", transition: "border-color .15s",
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+                    onMouseOut={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+                >
+                  <MapPin size={15} style={{ color: "var(--primary)", flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 13, color: "var(--foreground)", margin: 0, lineHeight: 1.4, flex: 1, minWidth: 0 }}>{address}</p>
+                  <ExternalLink size={13} style={{ color: "var(--muted-foreground)", flexShrink: 0, marginTop: 2 }} />
+                </a>
+              </GlassCard>
+          )}
+
+          {/* Payment */}
+          {!!data.depositRequired && (
+              <GlassCard style={{ padding: "16px 20px" }}>
+                <p className="label-mono" style={{ color: "var(--muted-foreground)", marginBottom: 10 }}>Payment</p>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Deposit required</span>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositRequired)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Paid</span>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{fmt.currency(data.depositPaid ?? 0)}</span>
+                </div>
+              </GlassCard>
+          )}
 
           {data.notes && (
               <GlassCard style={{ padding: "16px 20px" }}>

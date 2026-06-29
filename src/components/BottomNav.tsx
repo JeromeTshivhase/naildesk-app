@@ -19,7 +19,7 @@ export function BottomNav() {
       aria-label="Main navigation"
       style={{
         position:"fixed", bottom:0, zIndex:50,
-        padding:"0 12px 16px",
+        padding:"0 12px calc(16px + env(safe-area-inset-bottom, 0px))",
         maxWidth:480,
         left:"50%", transform:"translateX(-50%)",
         width:"100%",
@@ -54,7 +54,7 @@ export function BottomNav() {
                   ? "linear-gradient(135deg, oklch(0.72 0.12 55 / 0.15), oklch(0.62 0.10 25 / 0.08))"
                   : "transparent",
                 transition:"all .2s",
-                position:"relative",
+                position:"relative", overflow: "hidden",
               }}
             >
               <Icon
@@ -63,8 +63,12 @@ export function BottomNav() {
                 style={{ color: active ? "var(--primary)" : "var(--muted-foreground)", transition:"color .2s" }}
               />
               <span
-                className="label-mono"
-                style={{ color: active ? "var(--primary)" : "var(--muted-foreground)", transition:"color .2s" }}
+                style={{ 
+                  fontFamily: '"SF Mono", ui-monospace, Menlo, monospace',
+                  fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase",
+                  color: active ? "var(--primary)" : "var(--muted-foreground)", transition:"color .2s",
+                  fontWeight: active ? 600 : 400,
+                }}
               >
                 {label}
               </span>
