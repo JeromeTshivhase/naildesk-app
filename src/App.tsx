@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "./lib/auth";
+import { useAuth, hasRegistered } from "./lib/auth";
 import { AppShell } from "./components/AppShell";
 import { Loader2 } from "lucide-react";
 import { initPushNotifications, initStatusBar } from "./lib/capacitor";
@@ -79,7 +79,7 @@ function SplashScreen() {
 function RequireAuth() {
   const { authStatus } = useAuth();
   if (authStatus === "loading")         return <SplashScreen />;
-  if (authStatus === "unauthenticated") return <Navigate to="/login" replace />;
+  if (authStatus === "unauthenticated") return <Navigate to={hasRegistered() ? "/login" : "/register"} replace />;
   return (
       <AppShell>
         <Outlet />

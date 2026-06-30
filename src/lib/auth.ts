@@ -25,7 +25,19 @@ interface AuthState {
   hydrate: () => Promise<void>;
 }
 
-const PROFILE_KEY = "naildesk.profile";
+const PROFILE_KEY       = "naildesk.profile";
+const HAS_REGISTERED_KEY = "naildesk.hasRegistered";
+
+/** Written once after first registration — never cleared on logout. */
+export function markHasRegistered(): void {
+  // Clear setup guide dismiss so new users always see it
+  try { localStorage.removeItem("naildesk.setup-guide-seen"); } catch {}
+  try { localStorage.setItem(HAS_REGISTERED_KEY, "1"); } catch {}
+}
+
+export function hasRegistered(): boolean {
+  try { return localStorage.getItem(HAS_REGISTERED_KEY) === "1"; } catch { return false; }
+}
 const TOKEN_KEY   = "naildesk.token";
 const REFRESH_KEY = "naildesk.refresh";
 
@@ -138,6 +150,7 @@ export const useAuth = create<AuthState>((set, get) => {
         log("Saving tokens, hasAccess:", !!tokens?.accessToken, "hasRefresh:", !!tokens?.refreshToken);
         saveTokens(tokens.accessToken, tokens.refreshToken);
       }
+      markHasRegistered();
       log("Setting state: authenticated");
       set({ user, authStatus: "authenticated" });
     },

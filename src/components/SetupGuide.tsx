@@ -140,7 +140,7 @@ export function SetupGuideAutoPrompt() {
       notifGranted: ctx.notifGranted,
     };
     const allDone = STEPS.filter((s) => s.key !== "share").every((s) => s.done(safeCtx));
-    if (!seen && !allDone) setOpen(true);
+    if (!seen && !allDone) setTimeout(() => setOpen(true), 800);
   }, [ctx.loading]);
 
   if (!open) return null;
@@ -282,7 +282,7 @@ function SetupGuideModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Steps */}
-         <div style={{ padding: "16px 20px 28px", overflowY: "auto", flex: 1 }}>
+         <div style={{ padding: "16px 20px 0", paddingBottom: "calc(112px + env(safe-area-inset-bottom, 16px))", overflowY: "auto", flex: 1 }}>
            {STEPS.map((step, i) => {
              const isDone = step.key !== "share" && step.done(safeContext);
              const Icon = step.icon;
